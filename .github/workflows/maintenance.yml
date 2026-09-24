@@ -1,0 +1,38 @@
+name: Weekly Maintenance
+
+# Housekeeping that used to run daily from the database scheduler.
+# Runs from GitHub instead, weekly, so the database is never woken
+# just to confirm that nothing needs doing.
+
+on:
+  schedule:
+    # Mondays 05:10 UTC
+    - cron: '10 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean up expired livestream codes
+        run: |
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            -d '{}' \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/cleanup-otp"
+
+      - name: Check Facebook token health
+        run: |
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            -d '{"action":"check"}' \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/facebook-token-health"
+
+      - name: Check sync freshness
+        run: |
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/sync-health-check"
