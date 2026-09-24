@@ -1,0 +1,11 @@
+{
+  "name": "matches-scraper",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "scrape": "node scraper.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.42.0"
+  }
+}
