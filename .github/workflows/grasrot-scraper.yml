@@ -1,0 +1,45 @@
+name: Grasrotandelen Scraper
+
+on:
+  # Run daily at 06:07 UTC
+  schedule:
+    - cron: '7 6 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        working-directory: scripts/grasrot-scraper
+        run: npm install
+      
+      - name: Install Playwright browsers
+        working-directory: scripts/grasrot-scraper
+        run: npx playwright install chromium
+      
+      - name: Run scraper
+        working-directory: scripts/grasrot-scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          GRASROT_UPSERT_SECRET: ${{ secrets.GRASROT_UPSERT_SECRET }}
+        run: node scraper.mjs
+      
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-screenshots
+          path: scripts/grasrot-scraper/*.png
+          retention-days: 7
