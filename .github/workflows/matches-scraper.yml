@@ -1,0 +1,70 @@
+name: Matches Scraper
+
+on:
+  # Hourly, but the backend is only contacted when the data actually changed
+  schedule:
+    - cron: '0 * * * *'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Sync even if source data is unchanged'
+        type: boolean
+        default: false
+
+concurrency:
+  group: matches-scraper
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Restore previous fingerprint
+        uses: actions/cache/restore@v4
+        with:
+          path: scripts/matches-scraper/fingerprint.txt
+          key: matches-fingerprint-${{ github.run_id }}
+          restore-keys: |
+            matches-fingerprint-
+
+      - name: Install dependencies
+        working-directory: scripts/matches-scraper
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: scripts/matches-scraper
+        run: npx playwright install chromium
+
+      - name: Run scraper
+        working-directory: scripts/matches-scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          MATCHES_SYNC_SECRET: ${{ secrets.MATCHES_SYNC_SECRET }}
+          FORCE_SYNC: ${{ inputs.force }}
+        run: node scraper.mjs
+
+      - name: Save fingerprint
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: scripts/matches-scraper/fingerprint.txt
+          key: matches-fingerprint-${{ github.run_id }}
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-screenshots
+          path: scripts/matches-scraper/*.png
+          retention-days: 7
