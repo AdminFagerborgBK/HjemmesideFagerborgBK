@@ -1,0 +1,12 @@
+{
+  "name": "grasrot-scraper",
+  "version": "1.0.0",
+  "description": "Playwright scraper for Norsk Tipping Grasrotandelen statistics",
+  "type": "module",
+  "scripts": {
+    "scrape": "node scraper.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}
