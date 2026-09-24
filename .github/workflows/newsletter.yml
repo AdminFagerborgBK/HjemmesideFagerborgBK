@@ -1,0 +1,21 @@
+name: Monthly Newsletter
+
+# Creates and sends the monthly newsletter on the 1st of each month.
+# Runs from GitHub so the database is only touched on that single day.
+
+on:
+  schedule:
+    - cron: '0 7 1 * *'
+  workflow_dispatch:
+
+jobs:
+  newsletter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and send newsletter
+        run: |
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            -d '{"auto_send": true, "audience": "all"}' \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/generate-newsletter"
