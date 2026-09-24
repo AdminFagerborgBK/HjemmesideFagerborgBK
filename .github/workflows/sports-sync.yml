@@ -1,0 +1,86 @@
+name: Sports Data Sync (change-gated)
+
+# Fingerprints the official fotball.no tournament calendars (which contain
+# fixtures AND results). The Lovable backend is only contacted when the
+# source data has actually changed, so an idle week means zero backend work.
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Sync even if source data is unchanged'
+        type: boolean
+        default: false
+
+concurrency:
+  group: sports-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore previous fingerprint
+        uses: actions/cache/restore@v4
+        with:
+          path: fingerprint.txt
+          key: sports-fingerprint-${{ github.run_id }}
+          restore-keys: |
+            sports-fingerprint-
+
+      - name: Install reader
+        run: python3 -m pip install --quiet openpyxl
+
+      - name: Fingerprint source data
+        id: fp
+        run: |
+          set -e
+          for id in 205403 205410; do
+            curl -sSL --retry 3 \
+              -H 'User-Agent: Mozilla/5.0 (compatible; FagerborgBot/1.0)' \
+              -o "/tmp/$id.xlsx" \
+              "https://www.fotball.no/footballapi/Calendar/DownloadTournamentExcelCalendar?tournamentId=$id"
+          done
+          python3 scripts/fingerprint/dump_calendar.py /tmp/205403.xlsx /tmp/205410.xlsx > /tmp/content.txt
+          new=$(sha256sum /tmp/content.txt | cut -d' ' -f1)
+          old=$(cat fingerprint.txt 2>/dev/null || echo none)
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          if [ "$new" = "$old" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Source data unchanged - skipping backend sync."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Source data changed - syncing backend."
+          fi
+
+      - name: Sync division matches
+        if: steps.fp.outputs.changed == 'true'
+        run: |
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/division-matches-sync"
+
+      - name: Sync standings
+        if: steps.fp.outputs.changed == 'true'
+        run: |
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/standings-scraper"
+
+      - name: Store fingerprint
+        if: steps.fp.outputs.changed == 'true'
+        run: echo -n "${{ steps.fp.outputs.new }}" > fingerprint.txt
+
+      - name: Save fingerprint
+        if: steps.fp.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: fingerprint.txt
+          key: sports-fingerprint-${{ github.run_id }}
