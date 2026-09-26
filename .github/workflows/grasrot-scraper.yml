@@ -1,45 +1,22 @@
 name: Grasrotandelen Scraper
 
+# Calls the backend function that reads Norsk Tipping's official JSON API.
+# No browser/page scraping (the old page scraper broke when the page changed).
+
 on:
-  # Run daily at 06:07 UTC
   schedule:
+    # Daily at 06:07 UTC
     - cron: '7 6 * * *'
-  
-  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install dependencies
-        working-directory: scripts/grasrot-scraper
-        run: npm install
-      
-      - name: Install Playwright browsers
-        working-directory: scripts/grasrot-scraper
-        run: npx playwright install chromium
-      
-      - name: Run scraper
-        working-directory: scripts/grasrot-scraper
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
-          GRASROT_UPSERT_SECRET: ${{ secrets.GRASROT_UPSERT_SECRET }}
-        run: node scraper.mjs
-      
-      - name: Upload screenshots on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: scraper-screenshots
-          path: scripts/grasrot-scraper/*.png
-          retention-days: 7
+      - name: Update Grasrotandelen data
+        run: |
+          curl -fsS --retry 3 --retry-delay 10 -X POST \
+            -H 'Content-Type: application/json' \
+            -H "x-sync-secret: ${{ secrets.MATCHES_SYNC_SECRET }}" \
+            -d '{}' \
+            "${{ secrets.SUPABASE_PROJECT_URL }}/functions/v1/grasrot-scrape"
