@@ -35,7 +35,8 @@ async function loadTeamPage(page, team) {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       // Wait for the "Alle kamper" table (Hjemmelag/Bortelag headers) instead of
       // networkidle, which can hang forever on pages with persistent requests.
-      await page.waitForSelector('table', { timeout: 30000 });
+      // state: 'attached' — the match table can be in the DOM but hidden until its tab renders
+      await page.waitForSelector('table', { state: 'attached', timeout: 30000 });
       await page.waitForFunction(() => {
         return Array.from(document.querySelectorAll('table')).some((t) => {
           const txt = (t.textContent || '').toLowerCase();
