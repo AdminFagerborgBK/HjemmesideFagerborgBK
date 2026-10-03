@@ -24,14 +24,42 @@ const TEAMS = [
   { name: 'B-laget', fiksId: '6458' },
 ];
 
-async function scrapeTeamMatches(page, team) {
-  // Use /hjem/ page which shows ALL matches (league + NM/cup) in one table
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 5000;
+
+async function loadTeamPage(page, team) {
   const url = `https://www.fotball.no/fotballdata/lag/hjem/?fiksId=${team.fiksId}`;
   console.log(`[Scraper] Scraping ${team.name} from ${url}`);
-  
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.waitForTimeout(3000);
-  
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      // Wait for the "Alle kamper" table (Hjemmelag/Bortelag headers) instead of
+      // networkidle, which can hang forever on pages with persistent requests.
+      await page.waitForSelector('table', { timeout: 30000 });
+      await page.waitForFunction(() => {
+        return Array.from(document.querySelectorAll('table')).some((t) => {
+          const txt = (t.textContent || '').toLowerCase();
+          return txt.includes('hjemmelag') && txt.includes('bortelag');
+        });
+      }, { timeout: 30000 });
+      await page.waitForTimeout(1500);
+      return;
+    } catch (err) {
+      console.error(`[Scraper] ${team.name} attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err.message}`);
+      if (attempt < MAX_ATTEMPTS) {
+        await page.waitForTimeout(RETRY_DELAY_MS);
+      } else {
+        await page.screenshot({ path: `matches-${team.fiksId}-error.png`, fullPage: true }).catch(() => {});
+        throw err;
+      }
+    }
+  }
+}
+
+async function scrapeTeamMatches(page, team) {
+  // Use /hjem/ page which shows ALL matches (league + NM/cup) in one table
+  await loadTeamPage(page, team);
+
   await page.screenshot({ path: `matches-${team.fiksId}.png`, fullPage: true });
   
   // Parse the structured "Alle kamper" table
