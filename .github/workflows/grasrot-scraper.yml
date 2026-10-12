@@ -5,8 +5,8 @@ name: Grasrotandelen Scraper
 
 on:
   schedule:
-    # Daily at 06:07 UTC
-    - cron: '7 6 * * *'
+    # Daily at 12:07 UTC
+    - cron: '7 12 * * *'
   workflow_dispatch:
 
 jobs:
