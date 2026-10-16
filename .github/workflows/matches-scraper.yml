@@ -47,6 +47,9 @@ jobs:
         run: npx playwright install chromium
 
       - name: Run scraper
+        id: scrape
+        # Hourly job: a single flaky run should not trigger failure e-mails.
+        continue-on-error: true
         working-directory: scripts/matches-scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
@@ -55,14 +58,14 @@ jobs:
         run: node scraper.mjs
 
       - name: Save fingerprint
-        if: success()
+        if: steps.scrape.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: scripts/matches-scraper/fingerprint.txt
           key: matches-fingerprint-${{ github.run_id }}
 
       - name: Upload screenshots on failure
-        if: failure()
+        if: steps.scrape.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: scraper-screenshots
