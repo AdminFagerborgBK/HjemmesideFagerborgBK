@@ -14,9 +14,9 @@
  * - MATCHES_SYNC_SECRET: Secret for authentication to edge function
  */
 
-import { chromium } from 'playwright';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 
 const TEAMS = [
@@ -27,12 +27,29 @@ const TEAMS = [
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 5000;
 
-async function loadTeamPage(page, team) {
+export class SourceUnavailableError extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = 'SourceUnavailableError';
+    this.code = 'SOURCE_UNAVAILABLE';
+  }
+}
+
+function isSourceFailure(error) {
+  return error instanceof SourceUnavailableError ||
+    error?.name === 'TimeoutError' ||
+    (error instanceof Error && /^page\.goto: net::ERR_/.test(error.message));
+}
+
+export async function loadTeamPage(page, team, readMatches = async () => undefined) {
   const url = `https://www.fotball.no/fotballdata/lag/hjem/?fiksId=${team.fiksId}`;
   console.log(`[Scraper] Scraping ${team.name} from ${url}`);
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      if (response && !response.ok()) {
+        throw new SourceUnavailableError(`fotball.no returned HTTP ${response.status()}`);
+      }
       // Wait for the "Alle kamper" table (Hjemmelag/Bortelag headers) instead of
       // networkidle, which can hang forever on pages with persistent requests.
       // state: 'attached' — the match table can be in the DOM but hidden until its tab renders
@@ -42,16 +59,17 @@ async function loadTeamPage(page, team) {
           const txt = (t.textContent || '').toLowerCase();
           return txt.includes('hjemmelag') && txt.includes('bortelag');
         });
-      }, { timeout: 30000 });
+      }, undefined, { timeout: 30000 });
       await page.waitForTimeout(1500);
-      return;
+      return await readMatches();
     } catch (err) {
+      if (!isSourceFailure(err)) throw err;
       console.error(`[Scraper] ${team.name} attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err.message}`);
       if (attempt < MAX_ATTEMPTS) {
         await page.waitForTimeout(RETRY_DELAY_MS);
       } else {
         await page.screenshot({ path: `matches-${team.fiksId}-error.png`, fullPage: true }).catch(() => {});
-        throw err;
+        throw new SourceUnavailableError(`${team.name}: fotball.no unavailable after ${MAX_ATTEMPTS} attempts: ${err.message}`, { cause: err });
       }
     }
   }
@@ -59,13 +77,12 @@ async function loadTeamPage(page, team) {
 
 async function scrapeTeamMatches(page, team) {
   // Use /hjem/ page which shows ALL matches (league + NM/cup) in one table
-  await loadTeamPage(page, team);
-
-  await page.screenshot({ path: `matches-${team.fiksId}.png`, fullPage: true });
+  const matches = await loadTeamPage(page, team, async () => {
   
   // Parse the structured "Alle kamper" table
-  const matches = await page.evaluate(() => {
+  const rows = await page.evaluate(() => {
     const rows = [];
+    let incomplete = false;
     
     // Find all tables on the page - the "Alle kamper" section has a full table
     // with columns: Dato, Dag, Tid, Hjemmelag, Resultat, Bortelag, Bane, Turnering, Kampnr, Spillform
@@ -94,24 +111,24 @@ async function scrapeTeamMatches(page, team) {
       
       for (const row of bodyRows) {
         const cells = row.querySelectorAll('td');
-        if (cells.length < Math.max(hjemmeIdx, borteIdx) + 1) continue;
+        if (cells.length < Math.max(hjemmeIdx, borteIdx) + 1) { incomplete = true; continue; }
         
         // Extract date from link text (DD.MM.YYYY)
         const datoCell = datoIdx >= 0 ? cells[datoIdx] : null;
         const dateText = datoCell?.textContent?.trim() || '';
         const dateMatch = dateText.match(/(\d{2}\.\d{2}\.\d{4})/);
-        if (!dateMatch) continue;
+        if (!dateMatch) { incomplete = true; continue; }
         
         // Extract time
         const tidCell = tidIdx >= 0 ? cells[tidIdx] : null;
         const timeText = tidCell?.textContent?.trim() || '';
         const timeMatch = timeText.match(/(\d{2}:\d{2})/);
-        if (!timeMatch) continue;
+        if (!timeMatch) { incomplete = true; continue; }
         
         // Extract team names from link text
         const homeTeam = cells[hjemmeIdx]?.textContent?.trim() || '';
         const awayTeam = cells[borteIdx]?.textContent?.trim() || '';
-        if (!homeTeam || !awayTeam) continue;
+        if (!homeTeam || !awayTeam) { incomplete = true; continue; }
         
         // Extract venue
         const venue = baneIdx >= 0 ? (cells[baneIdx]?.textContent?.trim() || 'Ukjent') : 'Ukjent';
@@ -143,7 +160,7 @@ async function scrapeTeamMatches(page, team) {
           }
         }
         
-        if (!matchFiksId) continue;
+        if (!matchFiksId) { incomplete = true; continue; }
         
         // Parse result
         const resultatText = resultatIdx >= 0 ? (cells[resultatIdx]?.textContent?.trim() || '') : '';
@@ -183,8 +200,21 @@ async function scrapeTeamMatches(page, team) {
       if (rows.length > 0) break;
     }
     
-    return rows;
+    return { rows, incomplete };
   });
+  if (rows.incomplete || rows.rows.length === 0) {
+    throw new SourceUnavailableError(`${team.name}: fotball.no returned empty or incomplete match data`);
+  }
+  for (const match of rows.rows) {
+    const [day, month, year] = match.date.split('.');
+    if (!Number.isFinite(new Date(`${year}-${month}-${day}T${match.time}:00+02:00`).getTime())) {
+      throw new SourceUnavailableError(`${team.name}: fotball.no returned an invalid match date`);
+    }
+  }
+  return rows.rows;
+  });
+
+  await page.screenshot({ path: `matches-${team.fiksId}.png`, fullPage: true });
   
   console.log(`[Scraper] Found ${matches.length} matches for ${team.name}`);
   
@@ -211,6 +241,7 @@ async function scrapeTeamMatches(page, team) {
 async function scrapeAllTeams() {
   console.log('[Scraper] Starting matches scrape...');
   
+  const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -232,22 +263,29 @@ async function scrapeAllTeams() {
   return allMatches;
 }
 
-async function postToSupabase(matches) {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const syncSecret = process.env.MATCHES_SYNC_SECRET;
+function validateConfig(env) {
+  const supabaseUrl = env.SUPABASE_PROJECT_URL || env.SUPABASE_URL;
+  const syncSecret = env.MATCHES_SYNC_SECRET;
   
   if (!supabaseUrl) {
-    throw new Error('SUPABASE_URL environment variable is not set');
+    throw new Error('SUPABASE_PROJECT_URL / SUPABASE_URL environment variable is not set');
   }
   
   if (!syncSecret) {
     throw new Error('MATCHES_SYNC_SECRET environment variable is not set');
   }
+  const parsed = new URL(supabaseUrl);
+  if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Invalid backend URL');
+  return { supabaseUrl, syncSecret };
+}
+
+export async function postToSupabase(matches, env = process.env, fetchImpl = fetch) {
+  const { supabaseUrl, syncSecret } = validateConfig(env);
   
   const endpoint = `${supabaseUrl}/functions/v1/matches-upsert`;
   console.log(`[Scraper] Posting ${matches.length} matches to ${endpoint}`);
   
-  const response = await fetch(endpoint, {
+  const response = await fetchImpl(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -262,6 +300,9 @@ async function postToSupabase(matches) {
     console.error('[Scraper] API error:', response.status, result);
     throw new Error(`API returned ${response.status}: ${JSON.stringify(result)}`);
   }
+  if (result.success === false || result.error_count > 0) {
+    throw new Error(`Backend sync failed or partially failed: ${JSON.stringify(result)}`);
+  }
   
   console.log('[Scraper] Successfully posted data:', result);
   return result;
@@ -273,7 +314,7 @@ async function postToSupabase(matches) {
  */
 const FINGERPRINT_FILE = process.env.FINGERPRINT_FILE || 'fingerprint.txt';
 
-function fingerprint(matches) {
+export function fingerprint(matches) {
   const normalised = [...matches]
     .map((m) => JSON.stringify(m, Object.keys(m).sort()))
     .sort()
@@ -281,43 +322,63 @@ function fingerprint(matches) {
   return createHash('sha256').update(normalised).digest('hex');
 }
 
-function readPreviousFingerprint() {
+function readPreviousFingerprint(file) {
   try {
-    return readFileSync(FINGERPRINT_FILE, 'utf8').trim();
-  } catch {
-    return null;
+    return readFileSync(file, 'utf8').trim();
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
   }
 }
 
-async function main() {
+export async function main({ env = process.env, scrape = scrapeAllTeams, fetchImpl = fetch,
+  fingerprintFile = env.FINGERPRINT_FILE || FINGERPRINT_FILE } = {}) {
+  const output = (name, value) => {
+    if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `${name}=${value}\n`);
+  };
   try {
+    output('scrape_success', 'false');
+    output('source_unavailable', 'false');
+    validateConfig(env);
     console.log('[Scraper] === Matches Scraper ===');
     console.log(`[Scraper] Date: ${new Date().toISOString()}`);
 
-    const matches = await scrapeAllTeams();
+    const matches = await scrape();
+    if (matches.length === 0) throw new SourceUnavailableError('fotball.no returned no matches');
     console.log('[Scraper] Scraped matches:', JSON.stringify(matches.slice(0, 5), null, 2), '...');
 
     const hash = fingerprint(matches);
-    const previous = readPreviousFingerprint();
+    const previous = readPreviousFingerprint(fingerprintFile);
 
-    if (matches.length > 0 && previous === hash && process.env.FORCE_SYNC !== 'true') {
+    if (previous === hash && env.FORCE_SYNC !== 'true') {
       console.log('[Scraper] Source data unchanged — skipping backend sync.');
       console.log('[Scraper] === Complete (no change) ===');
-      return;
+      output('scrape_success', 'true');
+      return 0;
     }
 
-    const result = await postToSupabase(matches);
+    const result = await postToSupabase(matches, env, fetchImpl);
     if (matches.length > 0) {
-      writeFileSync(FINGERPRINT_FILE, hash);
+      writeFileSync(fingerprintFile, hash);
     }
+    output('scrape_success', 'true');
     console.log('[Scraper] === Complete ===');
     console.log(`[Scraper] Updated ${result.updated_count || matches.length} matches`);
+    return 0;
 
   } catch (error) {
+    if (error instanceof SourceUnavailableError) {
+      output('source_unavailable', 'true');
+      const message = error.message.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+      console.warn(`::warning title=SOURCE_UNAVAILABLE::${message}. Existing match data and fingerprint retained; next hourly run will retry.`);
+      return 0;
+    }
     console.error('[Scraper] Fatal error:', error);
-    process.exit(1);
+    return 1;
   }
 }
 
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await main();
+}

@@ -48,8 +48,6 @@ jobs:
 
       - name: Run scraper
         id: scrape
-        # Hourly job: a single flaky run should not trigger failure e-mails.
-        continue-on-error: true
         working-directory: scripts/matches-scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
@@ -58,14 +56,14 @@ jobs:
         run: node scraper.mjs
 
       - name: Save fingerprint
-        if: steps.scrape.outcome == 'success'
+        if: steps.scrape.outcome == 'success' && steps.scrape.outputs.scrape_success == 'true'
         uses: actions/cache/save@v4
         with:
           path: scripts/matches-scraper/fingerprint.txt
           key: matches-fingerprint-${{ github.run_id }}
 
-      - name: Upload screenshots on failure
-        if: steps.scrape.outcome == 'failure'
+      - name: Upload screenshots on failure or source unavailable
+        if: always() && (steps.scrape.outcome == 'failure' || steps.scrape.outputs.source_unavailable == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: scraper-screenshots
