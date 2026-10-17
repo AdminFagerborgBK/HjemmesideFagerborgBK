@@ -63,6 +63,22 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(fp, hashlib.sha256(b'valid-calendar').hexdigest())
         self.assertEqual(len(calls), 2)
 
+    def test_official_upcoming_dash_is_valid(self):
+        import datetime
+        import openpyxl
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / '205410.xlsx'
+            wb = openpyxl.Workbook()
+            wb.active.append(['Runde', 'Dato', 'Dag', 'Tid', 'Hjemmelag', 'Resultat', 'Bortelag', 'Bane', 'Turnering', 'Kampnummer'])
+            count = 0
+            for home in range(10):
+                for away in range(10):
+                    if home == away: continue
+                    count += 1
+                    wb.active.append(['1', datetime.datetime(2026, 10, 17), 'lørdag', '20:15', f'Team {home}', '-', f'Team {away}', 'Bane', 'League', str(count)])
+            wb.save(file)
+            self.assertIn('Team 0|-|Team 1', dump_calendar(file))
+
     def test_response_contract(self):
         class Response:
             def __enter__(self): return self

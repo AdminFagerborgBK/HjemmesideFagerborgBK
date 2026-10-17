@@ -33,7 +33,7 @@ def dump_calendar(path):
             raise SourceUnavailableError('Incomplete calendar row')
         if not re.fullmatch(r'\d+', str(row[0])) or not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', str(row[3])) or not re.fullmatch(r'\d+', str(row[9]).strip()):
             raise SourceUnavailableError('Invalid round, time or match ID')
-        if row[5] and not re.fullmatch(r'\d+\s*-\s*\d+', str(row[5]).strip()):
+        if row[5] and str(row[5]).strip() != '-' and not re.fullmatch(r'\d+\s*-\s*\d+', str(row[5]).strip()):
             raise SourceUnavailableError('Invalid match result')
         mid = str(row[9]).strip()
         if mid in ids:

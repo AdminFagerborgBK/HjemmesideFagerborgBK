@@ -71,7 +71,7 @@ export function parseExcel(buffer: ArrayBuffer): ParsedMatch[] {
     let homeScore: number | null = null;
     let awayScore: number | null = null;
     let status = 'upcoming';
-    if (resultat) {
+    if (resultat && String(resultat).trim() !== '-') {
       const rm = String(resultat).match(/(\d+)\s*-\s*(\d+)/);
       if (!rm) throw new SourceUnavailableError('Invalid calendar result');
       if (rm) {
