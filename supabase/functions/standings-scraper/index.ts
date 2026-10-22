@@ -5,7 +5,7 @@
  * Parses the desktop table and fetches club logos from individual team pages.
  */
 
-import { SourceUnavailableError, readSource, sourceText, recordStatus, configuredClient } from '../_shared/sourceAvailability.ts';
+import { SourceUnavailableError, readSource, sourceText, recordStatus, configuredClient, errorText } from '../_shared/sourceAvailability.ts';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4'
 import { requireAdminOrSecret } from '../_shared/adminAuth.ts'
@@ -277,21 +277,16 @@ return async (req: Request) => {
     const allStandings = [...aLaget, ...bLaget];
     if (aLaget.length !== 12 || bLaget.length !== 10) throw new SourceUnavailableError('Incomplete tables');
 
-    // Clear and reinsert
-    for (const t of ['A-laget', 'B-laget']) {
-      const { error } = await supabase.from('standings').delete().eq('team', t);
-      if (error) throw error;
-    }
-
-    const { error: insertError } = await supabase.from('standings').insert(allStandings);
-    if (insertError) throw insertError;
+    // One database transaction validates and replaces BOTH leagues.
+    const { error: replaceError } = await supabase.rpc('replace_sports_standings', { p_rows: allStandings });
+    if (replaceError) throw replaceError;
 
     console.log(`[Standings] Done. ${allStandings.length} teams updated.`);
 
     // Auto-update historical_standings when a season is complete.
     // A season is "complete" when every match in division_matches for that
     // division has status='finished' (and there is at least one match synced).
-    const currentYear = new Date().getFullYear();
+    const currentYear = Number(aLaget[0]?.season);
     const teamGroups: Array<{ team: 'A-laget' | 'B-laget'; rows: TeamStanding[]; ourName: string; division: string; divisionFiksId: string }> = [
       { team: 'A-laget', rows: aLaget, ourName: 'Fagerborg', division: '5. divisjon', divisionFiksId: '205403' },
       { team: 'B-laget', rows: bLaget, ourName: 'Fagerborg 2', division: '7. divisjon', divisionFiksId: '205410' },
@@ -312,7 +307,7 @@ return async (req: Request) => {
 
       if (totalError) throw totalError;
       if (unfinishedError) throw unfinishedError;
-      const isComplete = (totalMatches ?? 0) > 0 && (unfinishedMatches ?? 0) === 0;
+      const isComplete = totalMatches === g.rows.length * (g.rows.length - 1) && unfinishedMatches === 0;
       if (!isComplete) {
         console.log(`[Standings] ${g.team} season not complete (total=${totalMatches}, unfinished=${unfinishedMatches})`);
         continue;
@@ -389,11 +384,11 @@ return async (req: Request) => {
     );
   } catch (error) {
     console.error('[Standings] Error:', error);
-    try { if (supabase) await recordStatus(supabase, 'standings-scraper', false, { error: String(error) }); }
-    catch (statusError) { return new Response(JSON.stringify({ success: false, error: String(statusError) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
-    if (error instanceof SourceUnavailableError) return new Response(JSON.stringify({ success: false, source_unavailable: true, code: 'SOURCE_UNAVAILABLE', error: String(error) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    try { if (supabase) await recordStatus(supabase, 'standings-scraper', false, { error: errorText(error) }); }
+    catch (statusError) { return new Response(JSON.stringify({ success: false, error: errorText(statusError) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+    if (error instanceof SourceUnavailableError) return new Response(JSON.stringify({ success: false, source_unavailable: true, code: 'SOURCE_UNAVAILABLE', error: errorText(error) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     return new Response(
-      JSON.stringify({ success: false, error: String(error) }),
+      JSON.stringify({ success: false, error: errorText(error) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }

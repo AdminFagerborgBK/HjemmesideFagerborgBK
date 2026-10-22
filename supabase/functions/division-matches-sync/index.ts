@@ -1,12 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
-import { SourceUnavailableError, readSource, recordStatus, configuredClient } from '../_shared/sourceAvailability.ts';
+import { SourceUnavailableError, readSource, recordStatus, configuredClient, errorText } from '../_shared/sourceAvailability.ts';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 // @ts-ignore - npm specifier resolved at runtime
 import * as XLSX from 'npm:xlsx@0.18.5';
 import { requireAdminOrSecret } from '../_shared/adminAuth.ts';
 
-const DIVISION_FIKS_ID = '205403';
-const EXCEL_URL = `https://www.fotball.no/footballapi/Calendar/DownloadTournamentExcelCalendar?tournamentId=${DIVISION_FIKS_ID}`;
+export const DIVISIONS = [{ id: '205403', teams: 12 }, { id: '205410', teams: 10 }] as const;
 
 interface ParsedMatch {
   fiks_id: string;
@@ -26,8 +25,9 @@ interface ParsedMatch {
  * Parse the official fotball.no Excel calendar.
  * Columns: Runde | Dato | Dag | Tid | Hjemmelag | Resultat | Bortelag | Bane | Turnering | Kampnummer | Spillform
  */
-export function parseExcel(buffer: ArrayBuffer): ParsedMatch[] {
-  // @ts-ignore
+export function parseExcel(buffer: ArrayBuffer, divisionId = '205403'): ParsedMatch[] {
+  const division = DIVISIONS.find(d => d.id === divisionId);
+  if (!division) throw new Error(`Unsupported division ${divisionId}`);
   const bytes = new Uint8Array(buffer);
   if (bytes[0] !== 80 || bytes[1] !== 75) throw new SourceUnavailableError('Not an XLSX/ZIP file');
   let wb;
@@ -83,7 +83,7 @@ export function parseExcel(buffer: ArrayBuffer): ParsedMatch[] {
 
     out.push({
       fiks_id: String(kampnr).trim(),
-      division_fiks_id: DIVISION_FIKS_ID,
+      division_fiks_id: divisionId,
       round_number: runde != null ? parseInt(String(runde)) : null,
       match_date: matchDate.toISOString(),
       home_team: String(hjemme).trim(),
@@ -97,14 +97,14 @@ export function parseExcel(buffer: ArrayBuffer): ParsedMatch[] {
   }
 
   const teams = new Set(out.flatMap(m => [m.home_team, m.away_team]));
-  if (teams.size !== 12 || out.length !== 132 || new Set(out.map(m => m.fiks_id)).size !== out.length) throw new SourceUnavailableError('Incomplete or duplicate 2026 division calendar');
+  if (teams.size !== division.teams || out.length !== division.teams * (division.teams - 1) || new Set(out.map(m => m.fiks_id)).size !== out.length) throw new SourceUnavailableError(`Incomplete or duplicate ${divisionId} calendar`);
   const pairs = new Map<string, number>();
   for (const m of out) {
     if (m.home_team === m.away_team) throw new SourceUnavailableError('Invalid matchup');
     const key = JSON.stringify([m.home_team, m.away_team].sort());
     pairs.set(key, (pairs.get(key) ?? 0) + 1);
   }
-  if (pairs.size !== 66 || [...pairs.values()].some(count => count !== 2)) throw new SourceUnavailableError('Incomplete division matchups');
+  if (pairs.size !== division.teams * (division.teams - 1) / 2 || [...pairs.values()].some(count => count !== 2)) throw new SourceUnavailableError('Incomplete division matchups');
   const dedup = new Map<string, ParsedMatch>();
   for (const m of out) dedup.set(m.fiks_id, m);
   return Array.from(dedup.values());
@@ -126,20 +126,30 @@ return async (req: Request) => {
     });
   }
 
-    console.log(`[division-matches-sync] Fetching ${EXCEL_URL}`);
-    const matches = await (deps.load ?? (() => readSource(EXCEL_URL, async res => {
+    // Validate both complete calendars before writing either tournament.
+    const calendars = await Promise.all(DIVISIONS.map(async division => {
+      const url = `https://www.fotball.no/footballapi/Calendar/DownloadTournamentExcelCalendar?tournamentId=${division.id}`;
+      return await (deps.load ?? ((id: string) => readSource(url, async res => {
       let buffer;
       try { buffer = await res.arrayBuffer(); } catch (error) {
         if (error instanceof TypeError || error instanceof DOMException) throw new SourceUnavailableError('Source body interrupted');
         throw error;
       }
-      return parseExcel(buffer);
-    })))();
+      return parseExcel(buffer, id);
+    })))(division.id);
+    }));
+    const matches = calendars.flat();
+    for (const [index, division] of DIVISIONS.entries()) {
+      const rows = calendars[index];
+      if (rows.length !== division.teams * (division.teams - 1) || rows.some((m: ParsedMatch) => m.division_fiks_id !== division.id)) {
+        throw new SourceUnavailableError(`Incomplete ${division.id} calendar`);
+      }
+    }
     console.log(`[division-matches-sync] Parsed ${matches.length} matches`);
 
     const { error } = await supabase
       .from('division_matches')
-      .upsert(matches, { onConflict: 'fiks_id' });
+      .upsert(matches, { onConflict: 'division_fiks_id,fiks_id' });
 
     if (error) {
       console.error('[division-matches-sync] Upsert error:', error);
@@ -161,10 +171,10 @@ return async (req: Request) => {
   } catch (err) {
     console.error('[division-matches-sync] Error:', err);
     const source = err instanceof SourceUnavailableError;
-    try { if (supabase) await recordStatus(supabase, 'division-matches-sync', false, { error: String(err) }); }
-    catch (statusError) { return new Response(JSON.stringify({ success: false, error: String(statusError) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
-    if (source) return new Response(JSON.stringify({ success: false, source_unavailable: true, code: 'SOURCE_UNAVAILABLE', error: String(err) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    return new Response(JSON.stringify({ error: String(err) }), {
+    try { if (supabase) await recordStatus(supabase, 'division-matches-sync', false, { error: errorText(err) }); }
+    catch (statusError) { return new Response(JSON.stringify({ success: false, error: errorText(statusError) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+    if (source) return new Response(JSON.stringify({ success: false, source_unavailable: true, code: 'SOURCE_UNAVAILABLE', error: errorText(err) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: errorText(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -3,6 +3,13 @@ export class SourceUnavailableError extends Error {
   constructor(message: string) { super(message); this.name = 'SourceUnavailableError'; }
 }
 
+export function errorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (typeof error === 'string') return error;
+  try { return JSON.stringify(error) ?? String(error); }
+  catch { return String(error); }
+}
+
 export const jsonResponse = (body: unknown, headers: Record<string, string>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } });
 

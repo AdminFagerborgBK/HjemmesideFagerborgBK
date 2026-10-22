@@ -1,0 +1,90 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789118904747,
+      "tag": "0000_event_driven_scheduled_publish",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789120145179,
+      "tag": "0001_one_shot_scheduled_publish",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789121049963,
+      "tag": "0002_restrict_public_site_settings_secrets",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792228165901,
+      "tag": "0003_create_instagram_posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792228313503,
+      "tag": "0004_instagram_posts_allow_superadmin",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792228776198,
+      "tag": "0005_automatic_instagram_feed_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792236669825,
+      "tag": "0006_player_enrollment",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792516151774,
+      "tag": "0007_explicit_data_api_grants_2026_10_20",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792533667367,
+      "tag": "0008_goal_club_season_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792534013383,
+      "tag": "0009_goal_club_invoices_admin_paid",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792603988449,
+      "tag": "0010_goal_club_close_on_standings_insert",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792650211785,
+      "tag": "0011_sports_atomic_replace_and_trigger_hardening",
+      "breakpoints": true
+    }
+  ]
+}
