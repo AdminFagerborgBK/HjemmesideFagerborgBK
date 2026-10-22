@@ -13,7 +13,7 @@ export function validateSportsSeason(value: unknown): SportsSeason {
   const c = value as SportsSeason;
   if (!Number.isInteger(c.season) || c.season < 2000 || c.season > 2200 || c.timezone !== 'Europe/Oslo' || !Array.isArray(c.teams) || c.teams.length !== 2) throw new Error('Invalid sports season configuration');
   for (const t of c.teams) {
-    if (!['A-laget','B-laget'].includes(t.team) || !/^\d+$/.test(t.tournament_id) || !/^\d+$/.test(t.team_id) || !Number.isInteger(t.expected_teams) || t.expected_teams < 2 || t.expected_teams > 32 || !t.league?.trim() || !t.club_name?.trim()) throw new Error('Invalid sports team configuration');
+    if (!t || typeof t !== 'object' || !['A-laget','B-laget'].includes(t.team) || typeof t.tournament_id !== 'string' || !/^\d+$/.test(t.tournament_id) || typeof t.team_id !== 'string' || !/^\d+$/.test(t.team_id) || !Number.isInteger(t.expected_teams) || t.expected_teams < 2 || t.expected_teams > 32 || typeof t.league !== 'string' || !t.league.trim() || typeof t.club_name !== 'string' || !t.club_name.trim()) throw new Error('Invalid sports team configuration');
   }
   if (new Set(c.teams.map(t => t.team)).size !== 2 || new Set(c.teams.map(t => t.tournament_id)).size !== 2) throw new Error('Duplicate sports configuration');
   return c;

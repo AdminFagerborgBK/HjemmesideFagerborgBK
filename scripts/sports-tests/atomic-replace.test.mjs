@@ -111,3 +111,12 @@ test('database rejects a 2026 enrollment billed in 2027',async()=>{
   await db.query('INSERT INTO goal_club_invoices VALUES($1,2026)',[id]);
  }finally{await db.close();}
 });
+test('database rejects a 2027 enrollment billed in 2026',async()=>{
+ const db=await setup();
+ try{
+  const id='00000000-0000-0000-0000-000000000002';
+  await db.query('INSERT INTO goal_club_entries VALUES($1,2027)',[id]);
+  await assert.rejects(db.query('INSERT INTO goal_club_invoices VALUES($1,2026)',[id]),/must match/);
+  await db.query('INSERT INTO goal_club_invoices VALUES($1,2027)',[id]);
+ }finally{await db.close();}
+});

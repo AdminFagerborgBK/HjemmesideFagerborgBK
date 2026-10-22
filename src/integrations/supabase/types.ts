@@ -141,7 +141,7 @@ export type Database = {
           is_company?: boolean
           name: string
           phone?: string | null
-          season?: number
+          season: number
         }
         Update: {
           amount_per_goal?: number
@@ -1596,6 +1596,7 @@ export type Database = {
       }
       sports_seasons: {
         Row: {
+          created_at: string
           is_active: boolean
           season: number
           teams: Json
@@ -1603,6 +1604,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_at?: string
           is_active?: boolean
           season: number
           teams: Json
@@ -1610,6 +1612,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_at?: string
           is_active?: boolean
           season?: number
           teams?: Json
@@ -2020,6 +2023,7 @@ export type Database = {
       }
     }
     Functions: {
+      activate_sports_season: { Args: { p_season: number }; Returns: undefined }
       claim_goal_club_invoice: {
         Args: { _id: string }
         Returns: {

@@ -34,11 +34,11 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !supabaseServiceKey) throw new Error('Tjenesten er ikke konfigurert');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const {season}=await readSportsSeason(supabase);
+    const {season:requestedSeason}=await readSportsSeason(supabase);
 
     const { data, error } = await supabase
       .from('goal_club_entries')
-      .insert({ name, is_company: is_company || false, phone: phone || null, email, amount_per_goal, goal_guess, is_anonymous: is_anonymous || false })
+      .insert({ season:requestedSeason, name, is_company: is_company || false, phone: phone || null, email, amount_per_goal, goal_guess, is_anonymous: is_anonymous || false })
       .select()
       .single();
 
@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
       });
     }
 
+    const season=data.season;
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (resendApiKey) {
       const type = is_company ? 'Selskap' : 'Privatperson';

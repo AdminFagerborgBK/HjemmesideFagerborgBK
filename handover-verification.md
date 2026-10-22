@@ -1,5 +1,18 @@
 # Handover verification — 22 October 2026
 
+## Narrow P0.1–P0.3 completion — after 16:16 UTC
+
+- Follow-up `drizzle/migrations/0020_sports_season_admin_activation_and_explicit_enrollment.sql` applied live; generated client types refreshed. Prior migrations 0012/0013 and the shared Europe/Oslo resolver retained unchanged.
+- Live final read-back: active season 2026, timezone Europe/Oslo, A 205403 / 12 / 5. divisjon avd. 01, B 205410 / 10 / 7. divisjon avd. 02. Standings 12/10; division calendars 132/90; cron jobs 0; invoices 0; closures 0; sync errors null.
+- sports_seasons RLS enabled; anon can SELECT but cannot UPDATE. Activation RPC EXECUTE denied to anon and authenticated, granted only to service_role.
+- 63 targeted tests passed: 6 Vitest configuration/activation, 20 Node/PGlite DST/atomic standings/enrollment/activation, 3 Bun actual goal-club HTTP handler tests, 4 Bun actual season-settings handler tests, 21 Deno sports/goal-club tests, 9 Python fingerprint tests. Disposable complete schema replay succeeded; Deno check succeeded; automated app build OK at 16:18:47 UTC.
+- Exact requested DST cases pass: 2026-10-21 20:15 Oslo => 18:15Z; 2026-11-01 20:15 => 19:15Z. Spring gap rejection, spring offset transition and repeated autumn occurrence covered.
+- Actual settings handler isolated end-to-end: save/read-back 2027 draft, publish/read-back manifest, activate only after matching manifest, retain 2026 on GitHub rejection; non-admin/invalid config denied. Actual goal-club handler isolation covers active signup, 2026/2027 preview selection and explicit prior-season January rerun. No real network/email in these tests.
+- Live signed-in browser: 2027 draft with blank tournament IDs cannot save; deployed sports-season-settings action check reads real GitHub main through linked server credentials and verifies exact active 2026 manifest without writes; live 2026 invoice preview renders. Screenshots /tmp/browser/p0/next-season.png and preview.png inspected.
+- Deployed: sports-season-settings (latest source hash 815b4c5b06e5e44366fc55801522fd8bf6ab979cc6484a6ea763ab439eec3dfd), goal-club-signup, goal-club-season-close, standings-scraper, division-matches-sync, sync-matches, matches-upsert. Only sports-season-settings changed during this final continuation, adding authenticated read-only connection verification.
+- Files changed in this continuation: supabase/functions/sports-season-settings/index.ts; scripts/sports-tests/season-settings-handler.test.ts; roadmap.md; handover-verification.md. Earlier narrow-task files are recorded in the prior response.
+- Deliberately not performed: production season rollover, GitHub manifest write, workflow_dispatch, real signup/notification or invoice delivery. Production write activation is proven with isolated dependencies; live credentials/manifest read and live prior data are verified separately. This finishes the narrow P0 scope, not the broader handover or separate player portal.
+
 ## Confirmed
 
 - Vitest: 21 passed. Node sports/invoice/newsletter/matches tests: 36 passed. Python fingerprint: 9 passed. Deno sports/goal-club/Instagram tests: 37 passed.

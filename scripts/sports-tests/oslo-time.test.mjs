@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { osloWallTimeToIso, osloInputParts } from '../../supabase/functions/_shared/osloWallTime.mjs';
 
 for (const [date, utc] of [
+  ['2026-10-21', '18:15'],
   ['2026-10-24', '18:15'], ['2026-10-25', '19:15'], ['2026-11-01', '19:15'],
   ['2026-03-28', '19:15'], ['2026-03-29', '18:15'], ['2027-01-15', '19:15'],
 ]) {

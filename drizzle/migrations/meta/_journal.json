@@ -141,6 +141,13 @@
       "when": 1792682651201,
       "tag": "0019_goal_club_atomic_invoice_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792685079943,
+      "tag": "0020_sports_season_admin_activation_and_explicit_enrollment",
+      "breakpoints": true
     }
   ]
 }

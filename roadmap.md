@@ -1,4 +1,5 @@
 # Roadmap
+- [x] Avgrenset P0.1–P0.3: 0020 applied; sesong-admin/deploy og 63 målrettede tester bestod; live GitHub-check/preview og 2026 aktiv, 12/10 lag, 132/90 kamper, cron=0, fakturaer=0 verifisert. 2027-aktivering testet isolert, ikke i produksjon; ingen workflow_dispatch.
 - [x] Sluttkontroll 22.10 første runde: 103 tester, 458 GitHub-blobs, fresh checkout/build og grønne Sports 39808649096 / Matches 39808709394 / Grasrot 39808773326 på 7f2e758 verifisert.
 - [ ] Ny overleveringsrunde: nyhetsbrevvalg/provider-feil rettet og fire funksjoner deployet; lokal HTTP-nyhetsbrevtest og live admin/lesekontroller bestod. Ny GitHub-kopi/fresh checkout/workflows gjenstår.
 - [x] Full overlevering: DST-korrekt lagring og dynamisk sesongkonfigurasjon for backend, frontend og change-gating; ny kontroll og DST/2027-tester bestod.

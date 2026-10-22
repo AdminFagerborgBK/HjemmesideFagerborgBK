@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FacebookTokenStatus } from '@/components/admin/FacebookTokenStatus';
 import { TikTokTokenStatus } from '@/components/admin/TikTokTokenStatus';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
+import SportsSeasonSettings from '@/components/admin/SportsSeasonSettings';
 
 const AdminSettings = () => {
   const { data: settings, isLoading } = useSiteSettings();
@@ -60,6 +61,7 @@ const AdminSettings = () => {
           <p className="text-muted-foreground">Administrer nettsidens innstillinger</p>
         </div>
 
+        <SportsSeasonSettings />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -10,6 +10,7 @@
 - Resolve imported and admin-edited match wall times through the shared Europe/Oslo resolver, rejecting nonexistent DST times and choosing the first repeated autumn occurrence. Why: stored timestamps must not depend on fixed offsets or browser timezone.
 
 - Store active sports configuration in sports_seasons; public/sports-season.json is the versioned GitHub change-gating mirror and backend sync rejects mismatches. Why: idle checks must not contact the backend and season rollover must not silently use stale IDs.
+- Save season drafts through the existing settings screen; activation publishes and verifies the GitHub manifest before a server-only atomic activation RPC, without dispatching workflows. Why: a board member can roll over seasons without code changes while mismatches fail safely.
 - Scope every goal-club entry/read/invoice/winner to its enrollment season; database validation prevents cross-season invoices. Why: previous seasons never automatically renew.
 - Lazy-load routes except the homepage with a stable Suspense fallback. Why: public visitors must not download heavy admin route code upfront.
 - Newsletter editorial status and delivery state are separate; atomic delivery claims and monthly automatic uniqueness prevent duplicate campaigns, and post-claim failures require explicit recovery. Why: uncertain provider outcomes must never silently replay a real recipient list.
