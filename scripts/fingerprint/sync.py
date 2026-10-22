@@ -23,8 +23,8 @@ def download(url, fetch=urllib.request.urlopen):
             time.sleep(attempt + 1)
 
 
-def backend(url, secret):
-    request = urllib.request.Request(url, data=b'{}', headers={'Content-Type': 'application/json', 'x-sync-secret': secret}, method='POST')
+def backend(url, secret, manifest=None):
+    request = urllib.request.Request(url, data=json.dumps({'manifest':manifest} if manifest else {}).encode(), headers={'Content-Type': 'application/json', 'x-sync-secret': secret}, method='POST')
     with urllib.request.urlopen(request, timeout=180) as response:
         payload = json.loads(response.read())
     if not isinstance(payload, dict):
@@ -36,16 +36,28 @@ def backend(url, secret):
     return payload
 
 
-def calendar_source():
+def read_config():
+    path=Path(__file__).resolve().parents[2]/'public'/'sports-season.json'
+    config=json.loads(path.read_text())
+    if config.get('timezone')!='Europe/Oslo' or not isinstance(config.get('season'),int) or len(config.get('teams',[]))!=2:
+        raise RuntimeError('Invalid sports season manifest')
+    for t in config['teams']:
+        if not str(t.get('tournament_id','')).isdigit() or not isinstance(t.get('expected_teams'),int) or not 2<=t['expected_teams']<=32:
+            raise RuntimeError('Invalid tournament manifest')
+    return config
+
+def calendar_source(config=None):
+    config=read_config() if config is None else config
     with tempfile.TemporaryDirectory() as folder:
-        texts = []
-        for tid in ('205403', '205410'):
+        texts = [json.dumps(config,sort_keys=True)]
+        for team in config['teams']:
+            tid=team['tournament_id']
             path = Path(folder) / f'{tid}.xlsx'
             # Retry source parsing too, but never arbitrary Python failures.
             for attempt in range(3):
                 try:
                     path.write_bytes(download(f'https://www.fotball.no/footballapi/Calendar/DownloadTournamentExcelCalendar?tournamentId={tid}'))
-                    texts.append(dump_calendar(path).replace(str(path), tid))
+                    texts.append(dump_calendar(path,team['expected_teams']).replace(str(path), tid))
                     break
                 except SourceUnavailableError:
                     if attempt == 2:
@@ -70,8 +82,8 @@ def run(mode='sports', env=None, source=calendar_source, call=backend, fingerpri
         if new == old and env.get('FORCE_SYNC') != 'true':
             print('Source unchanged; backend not called')
             return 0
-        call(f'{url}/functions/v1/division-matches-sync', secret)
-        call(f'{url}/functions/v1/standings-scraper', secret)
+        call(f'{url}/functions/v1/division-matches-sync', secret, read_config()) if call is backend else call(f'{url}/functions/v1/division-matches-sync', secret)
+        call(f'{url}/functions/v1/standings-scraper', secret, read_config()) if call is backend else call(f'{url}/functions/v1/standings-scraper', secret)
         # This is the only point where a new fingerprint is committed.
         path.write_text(new)
         if env.get('GITHUB_OUTPUT'):

@@ -17,12 +17,13 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { osloWallTimeToIso } from '../../supabase/functions/_shared/osloWallTime.mjs';
 
 
-const TEAMS = [
-  { name: 'A-laget', fiksId: '311' },
-  { name: 'B-laget', fiksId: '6458' },
-];
+export function configuredTeams(config) {
+  if (!config || !Number.isInteger(config.season) || config.timezone!=='Europe/Oslo' || !Array.isArray(config.teams) || config.teams.length!==2 || new Set(config.teams.map(t=>t.team)).size!==2 || config.teams.some(t=>!['A-laget','B-laget'].includes(t.team) || !/^\d+$/.test(t.team_id))) throw new Error('Invalid sports season configuration');
+  return config.teams.map(t=>({name:t.team,fiksId:t.team_id}));
+}
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 5000;
@@ -207,8 +208,10 @@ async function scrapeTeamMatches(page, team) {
   }
   for (const match of rows.rows) {
     const [day, month, year] = match.date.split('.');
-    if (!Number.isFinite(new Date(`${year}-${month}-${day}T${match.time}:00+02:00`).getTime())) {
-      throw new SourceUnavailableError(`${team.name}: fotball.no returned an invalid match date`);
+    try { osloWallTimeToIso(`${year}-${month}-${day}`, match.time); }
+    catch (error) {
+      if (error instanceof RangeError) throw new SourceUnavailableError(`${team.name}: fotball.no returned an invalid match date`);
+      throw error;
     }
   }
   return rows.rows;
@@ -220,13 +223,12 @@ async function scrapeTeamMatches(page, team) {
   
   return matches.map(m => {
     const [day, month, year] = m.date.split('.');
-    // CEST/CET timezone offset
-    const matchDate = new Date(`${year}-${month}-${day}T${m.time}:00+02:00`);
+    const matchDate = osloWallTimeToIso(`${year}-${month}-${day}`, m.time);
     
     return {
       team: team.name,
       opponent: m.opponent,
-      match_date: matchDate.toISOString(),
+      match_date: matchDate,
       venue: m.venue,
       is_home: m.isHome,
       home_score: m.homeScore,
@@ -240,6 +242,7 @@ async function scrapeTeamMatches(page, team) {
 
 async function scrapeAllTeams() {
   console.log('[Scraper] Starting matches scrape...');
+  const teams=configuredTeams(JSON.parse(readFileSync(new URL('../../public/sports-season.json',import.meta.url),'utf8')));
   
   const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true });
@@ -251,7 +254,7 @@ async function scrapeAllTeams() {
   const allMatches = [];
   
   try {
-    for (const team of TEAMS) {
+    for (const team of teams) {
       const matches = await scrapeTeamMatches(page, team);
       allMatches.push(...matches);
     }

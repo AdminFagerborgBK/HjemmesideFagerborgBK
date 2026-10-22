@@ -1,0 +1,1 @@
+ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS venue_tbd BOOLEAN NOT NULL DEFAULT false;

@@ -1,0 +1,2 @@
+CREATE FUNCTION public.reject_plaintext_invitation() RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$ BEGIN IF coalesce(NEW.raw_token,'')<>'' THEN RAISE EXCEPTION 'Plaintext invitation tokens must never be stored'; END IF; RETURN NEW; END; $$;
+CREATE TRIGGER reject_plaintext_invitation BEFORE INSERT OR UPDATE OF raw_token ON public.player_invitations FOR EACH ROW EXECUTE FUNCTION public.reject_plaintext_invitation();

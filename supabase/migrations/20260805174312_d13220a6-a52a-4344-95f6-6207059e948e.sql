@@ -1,0 +1,1 @@
+update public.site_videos set category = 'inside' where title ilike '%Inside Fagerborg%';

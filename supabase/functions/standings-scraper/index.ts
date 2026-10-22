@@ -9,6 +9,7 @@ import { SourceUnavailableError, readSource, sourceText, recordStatus, configure
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4'
 import { requireAdminOrSecret } from '../_shared/adminAuth.ts'
+import { readSportsSeason, teamConfig, assertManifest, type SportsSeason } from '../_shared/sportsSeason.ts'
 
 interface TeamStanding {
   team: string;
@@ -139,7 +140,7 @@ function decodeHtmlEntities(str: string): string {
  * Parse the desktop standings table from fotball.no HTML.
  * Each row: Position | Team (link with fiksId) | Played | Won | Drawn | Lost | "GF - GA" | Diff | Points
  */
-export function parseStandingsHtml(html: string, team: 'A-laget' | 'B-laget', league: string): { standings: TeamStanding[], teamPageUrls: string[] } {
+export function parseStandingsHtml(html: string, team: 'A-laget' | 'B-laget', league: string, config: SportsSeason): { standings: TeamStanding[], teamPageUrls: string[] } {
   const standings: TeamStanding[] = [];
   const teamPageUrls: string[] = [];
 
@@ -203,15 +204,16 @@ export function parseStandingsHtml(html: string, team: 'A-laget' | 'B-laget', le
       points,
       form: [],
       league,
-      season: '2026',
+      season: String(config.season),
       logo_url: null,
       team_url: teamPageUrl,
     });
   }
 
-  const expected = team === 'A-laget' ? 12 : 10;
+  const configured = teamConfig(config, team);
+  const expected = configured.expected_teams;
   if (standings.length !== expected || new Set(standings.map(s => s.team_name)).size !== expected ||
-      !standings.some(s => s.team_name === (team === 'A-laget' ? 'Fagerborg' : 'Fagerborg 2')) ||
+      !standings.some(s => s.team_name === configured.club_name) ||
       !Array.from({ length: expected }, (_, i) => i + 1).every(p => standings.some(s => s.position === p))) {
     throw new SourceUnavailableError(`Incomplete ${team} standings: expected ${expected} unique teams`);
   }
@@ -222,11 +224,11 @@ export function parseStandingsHtml(html: string, team: 'A-laget' | 'B-laget', le
   return { standings, teamPageUrls };
 }
 
-async function scrapeStandings(fiksId: string, team: 'A-laget' | 'B-laget', league: string): Promise<TeamStanding[]> {
+async function scrapeStandings(fiksId: string, team: 'A-laget' | 'B-laget', league: string, config: SportsSeason): Promise<TeamStanding[]> {
   const url = `https://www.fotball.no/fotballdata/turnering/tabell/?fiksId=${fiksId}`;
   console.log(`[Standings] Scraping ${team} from ${url}`);
   
-  const { standings, teamPageUrls } = await readSource(url, async response => parseStandingsHtml(await sourceText(response), team, league));
+  const { standings, teamPageUrls } = await readSource(url, async response => parseStandingsHtml(await sourceText(response), team, league, config));
   console.log(`[Standings] Parsed ${standings.length} teams, fetching logos and form...`);
 
   const [logos, formMap] = await Promise.all([
@@ -269,13 +271,17 @@ return async (req: Request) => {
 
     console.log('[Standings] Starting scrape...');
 
+    const config: SportsSeason = deps.config ?? await readSportsSeason(supabase);
+    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+    if (body.manifest) assertManifest(config, body.manifest);
+    const a = teamConfig(config, 'A-laget'), b = teamConfig(config, 'B-laget');
     const [aLaget, bLaget] = await Promise.all([
-      (deps.scrape ?? scrapeStandings)('205403', 'A-laget', '5. divisjon avd. 01'),
-      (deps.scrape ?? scrapeStandings)('205410', 'B-laget', '7. divisjon avd. 02')
+      (deps.scrape ?? scrapeStandings)(a.tournament_id, a.team, a.league, config),
+      (deps.scrape ?? scrapeStandings)(b.tournament_id, b.team, b.league, config)
     ]);
 
     const allStandings = [...aLaget, ...bLaget];
-    if (aLaget.length !== 12 || bLaget.length !== 10) throw new SourceUnavailableError('Incomplete tables');
+    if (aLaget.length !== a.expected_teams || bLaget.length !== b.expected_teams) throw new SourceUnavailableError('Incomplete tables');
 
     // One database transaction validates and replaces BOTH leagues.
     const { error: replaceError } = await supabase.rpc('replace_sports_standings', { p_rows: allStandings });
@@ -288,8 +294,8 @@ return async (req: Request) => {
     // division has status='finished' (and there is at least one match synced).
     const currentYear = Number(aLaget[0]?.season);
     const teamGroups: Array<{ team: 'A-laget' | 'B-laget'; rows: TeamStanding[]; ourName: string; division: string; divisionFiksId: string }> = [
-      { team: 'A-laget', rows: aLaget, ourName: 'Fagerborg', division: '5. divisjon', divisionFiksId: '205403' },
-      { team: 'B-laget', rows: bLaget, ourName: 'Fagerborg 2', division: '7. divisjon', divisionFiksId: '205410' },
+      { team: a.team, rows: aLaget, ourName: a.club_name, division: a.league, divisionFiksId: a.tournament_id },
+      { team: b.team, rows: bLaget, ourName: b.club_name, division: b.league, divisionFiksId: b.tournament_id },
     ];
 
     for (const g of teamGroups) {
@@ -339,7 +345,7 @@ return async (req: Request) => {
       else if (qualPos > 0 && ours.position === qualPos) result = 'qualification';
       else if (ours.position >= total - relegateBottom + 1) result = 'relegation';
 
-      const tableUrl = `https://www.fotball.no/fotballdata/turnering/tabell/?fiksId=${g.team === 'A-laget' ? '205403' : '205410'}`;
+      const tableUrl = `https://www.fotball.no/fotballdata/turnering/tabell/?fiksId=${g.divisionFiksId}`;
 
       // Upsert by (team, year): update if exists, otherwise insert.
       const { data: existing, error: readError } = await supabase

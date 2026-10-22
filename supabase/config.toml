@@ -1,0 +1,64 @@
+project_id = "elvltuhjskdgboshavdx"
+
+[functions.grasrot-scrape]
+verify_jwt = false
+
+[functions.grasrot-upsert]
+verify_jwt = false
+
+[functions.join]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false
+
+[functions.admin-memberships]
+verify_jwt = false
+
+[functions.send-membership-email]
+verify_jwt = false
+
+[functions.import-news]
+verify_jwt = false
+ 
+[functions.contact-form]
+verify_jwt = false
+
+[functions.facebook-post]
+verify_jwt = false
+
+[functions.generate-news]
+verify_jwt = false
+
+[functions.fix-news-dates]
+verify_jwt = false
+
+[functions.generate-newsletter]
+verify_jwt = false
+
+[functions.send-newsletter]
+verify_jwt = false
+
+[functions.newsletter-unsubscribe]
+verify_jwt = false
+
+[functions.facebook-token-health]
+verify_jwt = false
+
+[functions.tiktok-auth]
+verify_jwt = false
+
+[functions.tiktok-publish]
+verify_jwt = false
+
+[functions.standings-scraper]
+verify_jwt = false
+
+[functions.livestream-otp]
+verify_jwt = false
+
+[functions.cleanup-otp]
+verify_jwt = false
+
+[functions.video-thumbnail]
+verify_jwt = false

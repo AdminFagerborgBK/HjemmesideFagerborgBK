@@ -1,0 +1,1 @@
+ALTER TABLE public.news ADD COLUMN image_focal_y integer NOT NULL DEFAULT 50;

@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS trg_goal_club_close_standings_insert ON public.standings;
+CREATE TRIGGER trg_goal_club_close_standings_insert AFTER INSERT ON public.standings FOR EACH ROW WHEN (NEW.team_name = 'Fagerborg') EXECUTE FUNCTION public.trigger_goal_club_season_close();

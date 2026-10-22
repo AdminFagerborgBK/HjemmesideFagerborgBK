@@ -1,0 +1,2 @@
+GRANT UPDATE (paid_at) ON public.goal_club_invoices TO authenticated;
+CREATE POLICY "Admins mark invoices paid" ON public.goal_club_invoices FOR UPDATE TO authenticated USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));

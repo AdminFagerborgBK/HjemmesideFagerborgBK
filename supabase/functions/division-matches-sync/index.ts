@@ -4,8 +4,9 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 // @ts-ignore - npm specifier resolved at runtime
 import * as XLSX from 'npm:xlsx@0.18.5';
 import { requireAdminOrSecret } from '../_shared/adminAuth.ts';
+import { osloWallTimeToIso } from '../_shared/osloWallTime.mjs';
 
-export const DIVISIONS = [{ id: '205403', teams: 12 }, { id: '205410', teams: 10 }] as const;
+import { readSportsSeason, assertManifest, type SportsSeason } from '../_shared/sportsSeason.ts';
 
 interface ParsedMatch {
   fiks_id: string;
@@ -25,8 +26,8 @@ interface ParsedMatch {
  * Parse the official fotball.no Excel calendar.
  * Columns: Runde | Dato | Dag | Tid | Hjemmelag | Resultat | Bortelag | Bane | Turnering | Kampnummer | Spillform
  */
-export function parseExcel(buffer: ArrayBuffer, divisionId = '205403'): ParsedMatch[] {
-  const division = DIVISIONS.find(d => d.id === divisionId);
+export function parseExcel(buffer: ArrayBuffer, divisionId: string, config: SportsSeason): ParsedMatch[] {
+  const division = config.teams.find(d => d.tournament_id === divisionId);
   if (!division) throw new Error(`Unsupported division ${divisionId}`);
   const bytes = new Uint8Array(buffer);
   if (bytes[0] !== 80 || bytes[1] !== 75) throw new SourceUnavailableError('Not an XLSX/ZIP file');
@@ -53,21 +54,15 @@ export function parseExcel(buffer: ArrayBuffer, divisionId = '205403'): ParsedMa
     if (!hjemme || !borte || !kampnr) throw new SourceUnavailableError('Missing team or match ID');
 
     if (!/^\d+$/.test(String(runde)) || !/^\d+$/.test(String(kampnr).trim()) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(tid))) throw new SourceUnavailableError('Invalid calendar round, ID or time');
-    let matchDate: Date;
-    if (dato instanceof Date) {
-      // Excel gave us a date; combine with tid (HH:MM string)
-      const tidStr = String(tid || '12:00');
-      const [hh, mm] = tidStr.split(':').map((n) => parseInt(n));
-      matchDate = new Date(Date.UTC(
-        dato.getUTCFullYear(), dato.getUTCMonth(), dato.getUTCDate(),
-        (hh || 12) - 2, mm || 0  // Oslo is UTC+2 in summer (CEST)
-      ));
-    } else {
-      // Fallback: try to parse string
-      matchDate = new Date(String(dato));
+    let matchDate: string;
+    const rawDate = dato instanceof Date ? dato.toISOString().slice(0, 10) : String(dato).trim();
+    const norwegianDate = rawDate.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    const date = norwegianDate ? `${norwegianDate[3]}-${norwegianDate[2]}-${norwegianDate[1]}` : rawDate;
+    try { matchDate = osloWallTimeToIso(date, String(tid)); }
+    catch (error) {
+      if (error instanceof RangeError) throw new SourceUnavailableError('Invalid calendar date/time');
+      throw error;
     }
-
-    if (!Number.isFinite(matchDate.getTime())) throw new SourceUnavailableError('Invalid calendar date');
     let homeScore: number | null = null;
     let awayScore: number | null = null;
     let status = 'upcoming';
@@ -85,7 +80,7 @@ export function parseExcel(buffer: ArrayBuffer, divisionId = '205403'): ParsedMa
       fiks_id: String(kampnr).trim(),
       division_fiks_id: divisionId,
       round_number: runde != null ? parseInt(String(runde)) : null,
-      match_date: matchDate.toISOString(),
+      match_date: matchDate,
       home_team: String(hjemme).trim(),
       away_team: String(borte).trim(),
       home_score: homeScore,
@@ -97,14 +92,14 @@ export function parseExcel(buffer: ArrayBuffer, divisionId = '205403'): ParsedMa
   }
 
   const teams = new Set(out.flatMap(m => [m.home_team, m.away_team]));
-  if (teams.size !== division.teams || out.length !== division.teams * (division.teams - 1) || new Set(out.map(m => m.fiks_id)).size !== out.length) throw new SourceUnavailableError(`Incomplete or duplicate ${divisionId} calendar`);
+  if (teams.size !== division.expected_teams || out.length !== division.expected_teams * (division.expected_teams - 1) || new Set(out.map(m => m.fiks_id)).size !== out.length) throw new SourceUnavailableError(`Incomplete or duplicate ${divisionId} calendar`);
   const pairs = new Map<string, number>();
   for (const m of out) {
     if (m.home_team === m.away_team) throw new SourceUnavailableError('Invalid matchup');
     const key = JSON.stringify([m.home_team, m.away_team].sort());
     pairs.set(key, (pairs.get(key) ?? 0) + 1);
   }
-  if (pairs.size !== division.teams * (division.teams - 1) / 2 || [...pairs.values()].some(count => count !== 2)) throw new SourceUnavailableError('Incomplete division matchups');
+  if (pairs.size !== division.expected_teams * (division.expected_teams - 1) / 2 || [...pairs.values()].some(count => count !== 2)) throw new SourceUnavailableError('Incomplete division matchups');
   const dedup = new Map<string, ParsedMatch>();
   for (const m of out) dedup.set(m.fiks_id, m);
   return Array.from(dedup.values());
@@ -127,22 +122,26 @@ return async (req: Request) => {
   }
 
     // Validate both complete calendars before writing either tournament.
-    const calendars = await Promise.all(DIVISIONS.map(async division => {
-      const url = `https://www.fotball.no/footballapi/Calendar/DownloadTournamentExcelCalendar?tournamentId=${division.id}`;
+    const config: SportsSeason = deps.config ?? await readSportsSeason(supabase);
+    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+    if (body.manifest) assertManifest(config, body.manifest);
+    const divisions = config.teams;
+    const calendars = await Promise.all(divisions.map(async division => {
+      const url = `https://www.fotball.no/footballapi/Calendar/DownloadTournamentExcelCalendar?tournamentId=${division.tournament_id}`;
       return await (deps.load ?? ((id: string) => readSource(url, async res => {
       let buffer;
       try { buffer = await res.arrayBuffer(); } catch (error) {
         if (error instanceof TypeError || error instanceof DOMException) throw new SourceUnavailableError('Source body interrupted');
         throw error;
       }
-      return parseExcel(buffer, id);
-    })))(division.id);
+      return parseExcel(buffer, id, config);
+    })))(division.tournament_id);
     }));
     const matches = calendars.flat();
-    for (const [index, division] of DIVISIONS.entries()) {
+    for (const [index, division] of divisions.entries()) {
       const rows = calendars[index];
-      if (rows.length !== division.teams * (division.teams - 1) || rows.some((m: ParsedMatch) => m.division_fiks_id !== division.id)) {
-        throw new SourceUnavailableError(`Incomplete ${division.id} calendar`);
+      if (rows.length !== division.expected_teams * (division.expected_teams - 1) || rows.some((m: ParsedMatch) => m.division_fiks_id !== division.tournament_id)) {
+        throw new SourceUnavailableError(`Incomplete ${division.tournament_id} calendar`);
       }
     }
     console.log(`[division-matches-sync] Parsed ${matches.length} matches`);

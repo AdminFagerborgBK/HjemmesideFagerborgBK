@@ -1,0 +1,1 @@
+ALTER TABLE public.matches ADD COLUMN is_cancelled boolean NOT NULL DEFAULT false;

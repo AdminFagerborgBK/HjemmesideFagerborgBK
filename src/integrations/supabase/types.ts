@@ -128,6 +128,7 @@ export type Database = {
           is_company: boolean
           name: string
           phone: string | null
+          season: number
         }
         Insert: {
           amount_per_goal?: number
@@ -140,6 +141,7 @@ export type Database = {
           is_company?: boolean
           name: string
           phone?: string | null
+          season?: number
         }
         Update: {
           amount_per_goal?: number
@@ -152,6 +154,7 @@ export type Database = {
           is_company?: boolean
           name?: string
           phone?: string | null
+          season?: number
         }
         Relationships: []
       }
@@ -858,8 +861,10 @@ export type Database = {
       }
       newsletters: {
         Row: {
+          automatic_month: string | null
           body_html: string
           created_at: string
+          delivery_state: string
           generated_at: string
           id: string
           sent_at: string | null
@@ -869,8 +874,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          automatic_month?: string | null
           body_html: string
           created_at?: string
+          delivery_state?: string
           generated_at?: string
           id?: string
           sent_at?: string | null
@@ -880,8 +887,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          automatic_month?: string | null
           body_html?: string
           created_at?: string
+          delivery_state?: string
           generated_at?: string
           id?: string
           sent_at?: string | null
@@ -1143,7 +1152,7 @@ export type Database = {
           email_state?: string
           expires_at?: string
           id?: string
-          raw_token: string
+          raw_token?: string
           revoked_at?: string | null
           snapshot: Json
           token_hash: string
@@ -1582,6 +1591,30 @@ export type Database = {
           },
         ]
       }
+      sports_seasons: {
+        Row: {
+          is_active: boolean
+          season: number
+          teams: Json
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          is_active?: boolean
+          season: number
+          teams: Json
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          is_active?: boolean
+          season?: number
+          teams?: Json
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       standings: {
         Row: {
           created_at: string
@@ -1769,6 +1802,7 @@ export type Database = {
           is_anonymous: boolean | null
           is_company: boolean | null
           name: string | null
+          season: number | null
         }
         Insert: {
           amount_per_goal?: number | null
@@ -1778,6 +1812,7 @@ export type Database = {
           is_anonymous?: boolean | null
           is_company?: never
           name?: never
+          season?: number | null
         }
         Update: {
           amount_per_goal?: number | null
@@ -1787,6 +1822,7 @@ export type Database = {
           is_anonymous?: boolean | null
           is_company?: never
           name?: never
+          season?: number | null
         }
         Relationships: []
       }
@@ -1984,6 +2020,17 @@ export type Database = {
       claim_instagram_feed_refresh: {
         Args: { p_account: string; p_lease_id: string }
         Returns: boolean
+      }
+      create_hashed_player_invitation: {
+        Args: {
+          p_actor: string
+          p_agreement_id: string
+          p_application_id: string
+          p_resend?: boolean
+          p_snapshot: Json
+          p_token_hash: string
+        }
+        Returns: string
       }
       create_player_invitation: {
         Args: {

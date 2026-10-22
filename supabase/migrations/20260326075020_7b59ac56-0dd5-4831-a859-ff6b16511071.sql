@@ -1,0 +1,1 @@
+ALTER TABLE public.livestream_otp DROP CONSTRAINT IF EXISTS livestream_otp_match_id_fkey;

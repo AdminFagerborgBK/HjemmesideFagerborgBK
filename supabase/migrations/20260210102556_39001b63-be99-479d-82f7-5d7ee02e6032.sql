@@ -1,0 +1,1 @@
+ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS time_tbd BOOLEAN NOT NULL DEFAULT false;

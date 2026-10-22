@@ -1,0 +1,1 @@
+ALTER TABLE public.site_roster ADD COLUMN birth_date date DEFAULT NULL;

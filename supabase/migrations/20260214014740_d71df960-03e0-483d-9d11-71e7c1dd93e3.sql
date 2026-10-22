@@ -1,0 +1,1 @@
+ALTER TABLE public.news ADD COLUMN facebook_post_id text DEFAULT NULL;

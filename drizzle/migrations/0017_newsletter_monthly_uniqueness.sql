@@ -1,0 +1,3 @@
+ALTER TABLE public.newsletters ADD COLUMN automatic_month text CHECK (automatic_month IS NULL OR automatic_month ~ '^[0-9]{4}-[0-9]{2}$');
+CREATE UNIQUE INDEX newsletters_automatic_month_unique ON public.newsletters(automatic_month) WHERE automatic_month IS NOT NULL;
+COMMENT ON COLUMN public.newsletters.automatic_month IS 'Database-enforced monthly automatic draft uniqueness; manual drafts remain unrestricted.';

@@ -1,0 +1,8 @@
+{
+  "season": 2026,
+  "timezone": "Europe/Oslo",
+  "teams": [
+    { "team": "A-laget", "tournament_id": "205403", "team_id": "311", "expected_teams": 12, "league": "5. divisjon avd. 01", "club_name": "Fagerborg" },
+    { "team": "B-laget", "tournament_id": "205410", "team_id": "6458", "expected_teams": 10, "league": "7. divisjon avd. 02", "club_name": "Fagerborg 2" }
+  ]
+}

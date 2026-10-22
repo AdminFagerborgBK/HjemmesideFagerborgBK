@@ -1,0 +1,2 @@
+ALTER TABLE public.historical_standings DROP CONSTRAINT IF EXISTS historical_standings_result_check;
+ALTER TABLE public.historical_standings ADD CONSTRAINT historical_standings_result_check CHECK (result = ANY (ARRAY['normal'::text, 'promotion'::text, 'relegation'::text, 'qualification'::text]));

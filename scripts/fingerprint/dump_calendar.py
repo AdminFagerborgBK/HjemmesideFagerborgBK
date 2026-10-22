@@ -1,4 +1,4 @@
-"""Validate official 2026 calendars and emit deterministic fingerprint input."""
+"""Validate official configured calendars and emit deterministic fingerprint input."""
 from collections import Counter
 import datetime
 import sys
@@ -13,7 +13,7 @@ class SourceUnavailableError(Exception):
     pass
 
 
-def dump_calendar(path):
+def dump_calendar(path, expected=None):
     if not zipfile.is_zipfile(path):
         raise SourceUnavailableError('Not a valid XLSX/ZIP file')
     try:
@@ -40,7 +40,13 @@ def dump_calendar(path):
             raise SourceUnavailableError('Duplicate calendar match')
         ids.add(mid)
         teams.update(str(row[i]).strip() for i in (4, 6))
-    expected = 12 if str(path).endswith('205403.xlsx') else 10
+    if expected is None:
+        import json
+        from pathlib import Path
+        config=json.loads((Path(__file__).resolve().parents[2]/'public'/'sports-season.json').read_text())
+        team=next((t for t in config['teams'] if str(path).endswith(t['tournament_id']+'.xlsx')),None)
+        if team is None: raise RuntimeError('Calendar missing season configuration')
+        expected=team['expected_teams']
     if len(teams) != expected or len(matches) != expected * (expected - 1):
         raise SourceUnavailableError('Incomplete tournament calendar')
     pairs = Counter(tuple(sorted((str(r[4]).strip(), str(r[6]).strip()))) for r in matches)

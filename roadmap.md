@@ -1,4 +1,8 @@
 # Roadmap
+- [ ] Full overlevering: DST-korrekt lagring og dynamisk sesongkonfigurasjon for backend, frontend og change-gating.
+- [ ] Full overlevering: sesongbundet Målklubb og hash-only invitasjoner med sikre eksisterende lenker/resend.
+- [ ] Full overlevering: lazy loading, SEO, mobil/tilgjengelighet, nyhetsbrev, sosiale medier og spillerportal-kontroller.
+- [ ] Full overlevering: full GitHub-main-kopi og ren installasjon/build, live RLS/grants/cron, deploys og faktiske safe workflow-kjøringer.
 - [ ] Utvid eksisterende separat spillerportal på spiller.fagerborgbk.no med egen avtale, avklaringer, søknad og betalingsstatus uten ekstra profil. Blokkert: spillerprosjektet finnes ikke blant tilgjengelige prosjekter i dette arbeidsområdet; byggingen må fortsette i det eksisterende spillerprosjektets chat. Ikke flytt domenet til klubbnettstedet.
 - [x] Avtalen sendes før betaling er gjennomført: ingen sperre på ubetalt status; testmail sendt med ubetalt status, gjentatt sending sendte ikke en ny mail.
 - [x] Separat spillersøknad, adminbehandling/invitasjon og sikker personlig side med private PDF-er, eksplisitt avtale-/planbekreftelse, egenbekreftet vs manuelt verifisert status og historikk. Desktop/mobil, riktig RSPTA-lenke, private PDF-er, avvist ugyldig invitasjon og admin-tilgang verifisert.

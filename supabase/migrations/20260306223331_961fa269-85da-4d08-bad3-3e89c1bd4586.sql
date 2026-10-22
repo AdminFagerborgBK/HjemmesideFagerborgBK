@@ -1,0 +1,1 @@
+UPDATE news SET facebook_post_id = '122108285553250905' WHERE id = 'eecd37ec-738f-43a6-8a6a-49dcca1df65b'

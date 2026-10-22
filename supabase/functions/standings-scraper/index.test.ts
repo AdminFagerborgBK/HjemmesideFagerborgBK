@@ -1,20 +1,23 @@
+import manifest from '../../../public/sports-season.json' with {type:'json'};
+import {validateSportsSeason} from '../_shared/sportsSeason.ts';
+const config=validateSportsSeason(manifest);
 import { assertEquals, assertThrows } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { createHandler, parseStandingsHtml } from './index.ts';
 import { SourceUnavailableError } from '../_shared/sourceAvailability.ts';
 Deno.test('Standings missing or partial source is explicit SOURCE_UNAVAILABLE', () => {
-  assertThrows(() => parseStandingsHtml('<html/>', 'A-laget', 'test'), SourceUnavailableError);
-  assertThrows(() => parseStandingsHtml('<div class="a_tableStandings"><table class="tablesorter"><tbody></tbody></table></div>', 'B-laget', 'test'), SourceUnavailableError);
+  assertThrows(() => parseStandingsHtml('<html/>', 'A-laget', 'test',config), SourceUnavailableError);
+  assertThrows(() => parseStandingsHtml('<div class="a_tableStandings"><table class="tablesorter"><tbody></tbody></table></div>', 'B-laget', 'test',config), SourceUnavailableError);
 });
 Deno.test('Standings one complete team and one incomplete team: no deletes/writes or last_success', async () => {
   const writes: any[] = [];
   const db = { from: () => ({ upsert: (row: any) => { writes.push(row); return Promise.resolve({ error: null }); }, delete: () => { throw new Error('must not delete'); } }) };
-  const response = await createHandler({ env: () => 'test', createClient: () => db, auth: async () => null,
+  const response = await createHandler({ config, env: () => 'test', createClient: () => db, auth: async () => null,
     scrape: async (_id: string, team: string) => Array.from({ length: team === 'A-laget' ? 12 : 0 }, () => ({})) })(new Request('https://test'));
   assertEquals(response.status, 200); assertEquals((await response.json()).source_unavailable, true);
   assertEquals(writes.some(w => 'last_success_at' in w), false);
 });
 Deno.test('Standings programming errors are fatal', async () => {
-  const response = await createHandler({ env: () => 'test', createClient: () => ({ from: () => ({ upsert: async () => ({ error: null }) }) }),
+  const response = await createHandler({ config, env: () => 'test', createClient: () => ({ from: () => ({ upsert: async () => ({ error: null }) }) }),
     auth: async () => null, scrape: async () => { throw new TypeError('bug'); } })(new Request('https://test'));
   assertEquals(response.status, 500); await response.text();
 });
@@ -55,7 +58,7 @@ function testDb(rpcError: unknown = null, bComplete = false) {
 }
 Deno.test('Standings complete 12+10 uses exactly one RPC and B 90-match season-complete saves history', async () => {
   const fake = testDb(null, true);
-  const response = await createHandler({ env: () => 'test', createClient: () => fake.db, auth: async () => null,
+  const response = await createHandler({ config, env: () => 'test', createClient: () => fake.db, auth: async () => null,
     scrape: async (_id: string, team: string) => validRows(team) })(new Request('https://test'));
   assertEquals(response.status, 200); assertEquals((await response.json()).success, true);
   assertEquals(fake.stored().length, 22);
@@ -65,7 +68,7 @@ Deno.test('Standings complete 12+10 uses exactly one RPC and B 90-match season-c
 Deno.test('Standings RPC DB failure preserves old 22 rows and records useful JSON, returning 500', async () => {
   const fake = testDb({ code: '23505', message: 'insert conflict', details: 'duplicate row' });
   const old = fake.stored();
-  const response = await createHandler({ env: () => 'test', createClient: () => fake.db, auth: async () => null,
+  const response = await createHandler({ config, env: () => 'test', createClient: () => fake.db, auth: async () => null,
     scrape: async (_id: string, team: string) => validRows(team) })(new Request('https://test'));
   assertEquals(response.status, 500); await response.text();
   assertEquals(fake.stored(), old);
@@ -74,14 +77,14 @@ Deno.test('Standings RPC DB failure preserves old 22 rows and records useful JSO
 });
 Deno.test('Standings source unavailable preserves old rows without RPC', async () => {
   const fake = testDb(); const old = fake.stored();
-  const response = await createHandler({ env: () => 'test', createClient: () => fake.db, auth: async () => null,
+  const response = await createHandler({ config, env: () => 'test', createClient: () => fake.db, auth: async () => null,
     scrape: async () => { throw new SourceUnavailableError('fotball.no offline'); } })(new Request('https://test'));
   assertEquals(response.status, 200); assertEquals((await response.json()).source_unavailable, true);
   assertEquals(fake.stored(), old); assertEquals('last_success_at' in fake.statuses[0], false);
 });
 Deno.test('Standings invalid auth is 401 and never runs replacement', async () => {
   const fake = testDb(); const old = fake.stored();
-  const response = await createHandler({ env: () => 'test', createClient: () => fake.db,
+  const response = await createHandler({ config, env: () => 'test', createClient: () => fake.db,
     auth: async () => new Response('', { status: 401 }) })(new Request('https://test'));
   assertEquals(response.status, 401); await response.text(); assertEquals(fake.stored(), old);
 });

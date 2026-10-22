@@ -1,0 +1,1 @@
+ALTER TABLE public.historical_standings ADD COLUMN IF NOT EXISTS locked boolean NOT NULL DEFAULT false;

@@ -1,0 +1,1 @@
+ALTER TABLE public.site_roster ADD COLUMN nifs_url text DEFAULT NULL;

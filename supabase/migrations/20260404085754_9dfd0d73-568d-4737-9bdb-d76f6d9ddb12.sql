@@ -1,0 +1,1 @@
+ALTER TABLE public.standings ADD COLUMN IF NOT EXISTS team_url text;

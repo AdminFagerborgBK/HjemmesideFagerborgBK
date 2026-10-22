@@ -1,0 +1,1 @@
+UPDATE matches SET home_score=2, away_score=3, status='finished' WHERE id='3818eecc-0d99-49b4-a46a-8573e734826e';

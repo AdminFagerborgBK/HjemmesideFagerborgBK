@@ -3,10 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main, loadTeamPage, SourceUnavailableError, fingerprint } from './scraper.mjs';
+import { main, loadTeamPage, SourceUnavailableError, fingerprint, configuredTeams } from './scraper.mjs';
 
 const matches = [{ team: 'A-laget', fiks_id: '123', opponent: 'Test' }];
 const config = { SUPABASE_PROJECT_URL: 'https://backend.example', MATCHES_SYNC_SECRET: 'test-only' };
+test('2027 match scraper uses configured team IDs instead of previous IDs',()=>{
+  expectConfig();
+  function expectConfig(){assert.deepEqual(configuredTeams({season:2027,timezone:'Europe/Oslo',teams:[{team:'A-laget',team_id:'9001'},{team:'B-laget',team_id:'9002'}]}),[{name:'A-laget',fiksId:'9001'},{name:'B-laget',fiksId:'9002'}]);}
+  assert.throws(()=>configuredTeams({season:2027,timezone:'Europe/Oslo',teams:[]}));
+});
 
 async function run(options = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'matches-errors-'));
