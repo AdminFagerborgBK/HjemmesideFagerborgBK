@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { osloYear } from "@/lib/grasrotYear";
 
 interface GrasrotYearlyRow {
   year: number;
@@ -54,7 +55,7 @@ export const useGrasrotDirect = () => {
         console.warn("[useGrasrotDirect] Could not fetch status (table may not exist):", e);
       }
 
-      const currentYear = new Date().getFullYear();
+      const currentYear = osloYear();
       const typedData: GrasrotYearlyRow[] = (yearlyData || []).map(row => ({
         year: row.year,
         amount_nok: typeof row.amount_nok === 'string' ? parseFloat(row.amount_nok) : row.amount_nok,

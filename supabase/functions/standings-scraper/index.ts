@@ -325,26 +325,8 @@ return async (req: Request) => {
         continue;
       }
 
-      // Default result rule based on division (admin can override in CMS):
-      //   2. div: 1 opp, 2. plass = kvalik, 3 ned
-      //   3. div: 1 opp, 3 ned
-      //   4. div: 1 opp, 2 ned
-      //   5. div og lavere: 2 opp, 2 ned
-      const divNum = parseInt((g.division.match(/(\d+)\s*\.?\s*divisjon/i)?.[1]) ?? '0', 10);
-      const total = g.rows.length;
-      let promoteTop = 2;
-      let qualPos = 0; // 0 = ingen kvalik
-      let relegateBottom = 2;
-      if (divNum === 2) { promoteTop = 1; qualPos = 2; relegateBottom = 3; }
-      else if (divNum === 3) { promoteTop = 1; qualPos = 0; relegateBottom = 3; }
-      else if (divNum === 4) { promoteTop = 1; qualPos = 0; relegateBottom = 2; }
-      else { promoteTop = 2; qualPos = 0; relegateBottom = 2; } // 5. div og lavere
-
-      let result: 'promotion' | 'relegation' | 'qualification' | 'normal' = 'normal';
-      if (ours.position <= promoteTop) result = 'promotion';
-      else if (qualPos > 0 && ours.position === qualPos) result = 'qualification';
-      else if (ours.position >= total - relegateBottom + 1) result = 'relegation';
-
+      // Sporting outcome (promotion/relegation/qualification) is NOT inferred:
+      // NFF Oslo rules, draws and relegation counts vary. Admin sets result manually.
       const tableUrl = `https://www.fotball.no/fotballdata/turnering/tabell/?fiksId=${g.divisionFiksId}`;
 
       // Upsert by (team, year): update if exists, otherwise insert.
@@ -361,9 +343,8 @@ return async (req: Request) => {
           console.log(`[Standings] historical_standings LOCKED — skipping ${g.team} ${currentYear}`);
           continue;
         }
-        // Only update if position is missing or different — don't overwrite a manual result edit.
+        // Never write result: an existing (manual) value is preserved untouched.
         const updates: Record<string, unknown> = { position: ours.position, division: g.division, table_url: tableUrl };
-        if (!existing.result) updates.result = result;
         const { error: updErr } = await supabase
           .from('historical_standings')
           .update(updates)
@@ -373,7 +354,7 @@ return async (req: Request) => {
       } else {
         const { error: insErr } = await supabase
           .from('historical_standings')
-          .insert({ team: g.team, year: currentYear, division: g.division, position: ours.position, result, table_url: tableUrl });
+          .insert({ team: g.team, year: currentYear, division: g.division, position: ours.position, result: null, table_url: tableUrl });
         if (insErr) throw insErr;
         else console.log(`[Standings] historical_standings inserted ${g.team} ${currentYear} -> pos ${ours.position}`);
       }

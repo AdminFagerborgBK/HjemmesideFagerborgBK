@@ -9,6 +9,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
 import { nb } from "date-fns/locale";
 import { useState } from "react";
+import { osloYear, defaultGrasrotYear, completedYears } from "@/lib/grasrotYear";
 
 const GRASROT_SOURCE_URL = "https://www.norsk-tipping.no/grasrotandelen/statistikk/iframe/996145530";
 
@@ -25,8 +26,9 @@ const chartConfig = {
 
 const GrasrotSection = () => {
   const { data, isLoading, error } = useGrasrotDirect();
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
+  const currentYear = osloYear();
+  // null = follow automatic default; set only when the user actively picks a year.
+  const [manualYear, setManualYear] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
   const formatLastUpdated = (dateString: string | null): string => {
@@ -46,23 +48,25 @@ const GrasrotSection = () => {
     return null;
   };
 
-  // Chart: last 5 completed years (exclude current year)
-  const lastCompletedYear = currentYear - 1;
-  const chartData = data?.yearlyData
-    ?.filter(d => d.amount_nok > 0 && d.year <= lastCompletedYear)
-    .sort((a, b) => a.year - b.year)
-    .slice(-5)
-    .map(d => ({
+  // Chart: last 5 completed years (exclude current Oslo year)
+  const chartData = completedYears(
+    (data?.yearlyData ?? []).filter(d => d.amount_nok > 0),
+    currentYear,
+  ).map(d => ({
       year: d.year.toString(),
       amount: Math.round(d.amount_nok),
       supporters: d.num_supporters || 0,
-    })) || [];
+    }));
 
-  // Selected year data
-  const selectedYearData = data?.yearlyData?.find(d => d.year === parseInt(selectedYear));
   const allYears = data?.yearlyData
-    ?.filter(d => d.amount_nok > 0)
+    ?.filter(d => d.amount_nok > 0 || d.year === currentYear)
     .sort((a, b) => b.year - a.year) || [];
+  const autoYear = defaultGrasrotYear(allYears.map(d => d.year), currentYear);
+  const selectedYear = manualYear && allYears.some(d => d.year.toString() === manualYear)
+    ? manualYear
+    : autoYear?.toString() ?? "";
+  const setSelectedYear = (v: string) => setManualYear(v);
+  const selectedYearData = data?.yearlyData?.find(d => d.year === parseInt(selectedYear));
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
