@@ -14,11 +14,11 @@ interface Inv { name: string; amount_per_goal: number; total_nok: number; refere
 
 const subjectFor = (season: number, total: number) => `Målklubben ${season}: sesongoppsummering og faktura (${kr(total)} kr)`;
 
-function renderInvoice(season: number, goals: number, fb: Fb, inv: Inv, guess: number | null | undefined) {
+function renderInvoice(season: number, goals: number, fb: Fb, inv: Inv, guess: number | null | undefined, complete=true) {
   return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a">
 <h1 style="color:#1a365d;font-size:22px">Målklubben ${season} – takk for sesongen! ⚽</h1>
 <p>Hei ${htmlEscape(inv.name)},</p>
-<p>Sesongen ${season} er ferdigspilt for A-laget. Vi endte på <strong>${fb.position}. plass</strong> i ${htmlEscape(fb.league)} med ${fb.points} poeng (${fb.won} seire, ${fb.drawn} uavgjort, ${fb.lost} tap) og målforskjell ${fb.goals_for}–${fb.goals_against}.</p>
+<p>${complete?`Sesongen ${season} er ferdigspilt for A-laget. Vi endte på`:`Foreløpig sesong ${season}: A-laget ligger på`} <strong>${fb.position}. plass</strong> i ${htmlEscape(fb.league)} med ${fb.points} poeng (${fb.won} seire, ${fb.drawn} uavgjort, ${fb.lost} tap) og målforskjell ${fb.goals_for}–${fb.goals_against}.</p>
 <p>Totalt scoret Fagerborg <strong>${goals} mål</strong> i serie og NM. Takk for at du var med og heiet på hver eneste scoring!</p>
 ${inv.is_winner ? `<p style="background:#fef3c7;padding:12px;border-radius:8px">🏆 <strong>Gratulerer – du vant måltipset!</strong> Du tippet ${guess} mål, som var nærmest. Vi tar kontakt om premien.</p>` : ''}
 <h2 style="color:#1a365d;font-size:18px">Faktura</h2>
@@ -49,7 +49,8 @@ Deno.serve(async (req) => {
   const season=config.season, a=teamConfig(config,'A-laget');
   const preview = reqBody?.preview === true;
 
-  const { data: existing } = await db.from('goal_club_season_closures').select('status').eq('season', season).maybeSingle();
+  const { data: existing, error:closureReadError } = await db.from('goal_club_season_closures').select('status').eq('season', season).maybeSingle();
+  if(closureReadError) throw closureReadError;
   if (!preview && existing?.status === 'completed') return json({ status: 'already_sent', season });
 
   const [{ data: matches, error: mErr }, { data: standings, error: sErr }] = await Promise.all([
@@ -64,7 +65,8 @@ Deno.serve(async (req) => {
   if (preview) {
     const goals = seasonGoals(matches ?? []);
     const fb: Fb = (standings ?? []).find((s) => s.team_name === a.club_name) ?? { position: 0, league: '–', points: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0 };
-    const { data: ents } = await db.from('goal_club_entries').select('id,name,email,amount_per_goal,goal_guess').eq('season',season).is('deleted_at', null).order('name');
+    const { data: ents, error:entriesError } = await db.from('goal_club_entries').select('id,name,email,amount_per_goal,goal_guess').eq('season',season).is('deleted_at', null).order('name');
+    if(entriesError) throw entriesError;
     const list = ents ?? [];
     const e = list.find((x) => x.id === reqBody?.entry_id) ?? list[0]
       ?? { id: '00000000-0000-0000-0000-000000000000', name: 'Eksempel Medlem', email: 'eksempel@fagerborgbk.no', amount_per_goal: 10, goal_guess: 50 };
@@ -72,7 +74,7 @@ Deno.serve(async (req) => {
     return json({
       preview: true, season, complete, goals, entry_id: e.id,
       entries: list.map((x) => ({ id: x.id, name: x.name })),
-      to: e.email, subject: subjectFor(season, inv.total_nok), html: renderInvoice(season, goals, fb, inv, e.goal_guess),
+      to: e.email, subject: subjectFor(season, inv.total_nok), html: renderInvoice(season, goals, fb, inv, e.goal_guess,complete),
     });
   }
   // Test send: simulates season end using current data, mails ONLY the given test address, writes nothing.
@@ -99,23 +101,30 @@ Deno.serve(async (req) => {
   const goals = seasonGoals(matches ?? []);
   const fb = standings?.find((s) => s.team_name === a.club_name);
   if (!fb) return json({error:'Klubbens tabellrad mangler'},500);
-  await db.from('goal_club_season_closures').upsert({ season, goals, final_position: fb.position, league: fb.league }, { onConflict: 'season', ignoreDuplicates: true });
+  const {error:closureError}=await db.from('goal_club_season_closures').upsert({ season, goals, final_position: fb.position, league: fb.league }, { onConflict: 'season', ignoreDuplicates: true });
+  if(closureError) throw closureError;
 
-  const { data: entries } = await db.from('goal_club_entries').select('id,name,email,amount_per_goal,goal_guess').eq('season',season).is('deleted_at', null);
+  const { data: entries, error:entriesError } = await db.from('goal_club_entries').select('id,name,email,amount_per_goal,goal_guess').eq('season',season).is('deleted_at', null);
+  if(entriesError) throw entriesError;
   const winners = winnerIds(entries ?? [], goals);
   const due = dueDate(new Date());
   if (entries?.length) {
-    await db.from('goal_club_invoices').upsert(entries.map((e) => ({
+    const {error:invoiceError}=await db.from('goal_club_invoices').upsert(entries.map((e) => ({
       season, entry_id: e.id, email: e.email, name: e.name, amount_per_goal: e.amount_per_goal, goals,
       total_nok: e.amount_per_goal * goals, reference: invoiceReference(season, e.id), due_date: due, is_winner: winners.has(e.id),
     })), { onConflict: 'season,entry_id', ignoreDuplicates: true });
+    if(invoiceError) throw invoiceError;
   }
 
   const key = Deno.env.get('RESEND_API_KEY');
-  const { data: pending } = await db.from('goal_club_invoices').select('*').eq('season', season).neq('email_state', 'sent');
+  const { data: pending, error:pendingError } = await db.from('goal_club_invoices').select('*').eq('season', season).in('email_state', ['pending','failed']);
+  if(pendingError) throw pendingError;
   const guesses = new Map((entries ?? []).map((e) => [e.id, e.goal_guess]));
   let sent = 0, failed = 0;
   for (const inv of pending ?? []) {
+    const {data:claim,error:claimError}=await db.rpc('claim_goal_club_invoice',{_id:inv.id});
+    if(claimError) throw claimError;
+    if(!claim?.length) continue;
     const html = renderInvoice(season, goals, fb, inv, guesses.get(inv.entry_id));
     let ok = false, id: string | null = null, err: string | null = null;
     if (!key) err = 'RESEND_API_KEY mangler';
@@ -128,11 +137,16 @@ Deno.serve(async (req) => {
       const body = await r.json().catch(() => ({}));
       ok = r.ok; id = body?.id ?? null; err = r.ok ? null : JSON.stringify(body).slice(0, 300);
     }
-    await db.from('goal_club_invoices').update(ok ? { email_state: 'sent', email_id: id, sent_at: new Date().toISOString(), email_error: null } : { email_state: 'failed', email_error: err }).eq('id', inv.id);
+    const {error:outcomeError}=await db.from('goal_club_invoices').update(ok ? { email_state: 'sent', email_id: id, sent_at: new Date().toISOString(), email_error: null } : { email_state: 'failed', email_error: err }).eq('id', inv.id).eq('email_state','sending');
+    if(outcomeError) throw new Error(`Invoice ${inv.id} delivery outcome needs reconciliation: ${outcomeError.message}`);
     ok ? sent++ : failed++;
   }
-  const { count } = await db.from('goal_club_invoices').select('id', { count: 'exact', head: true }).eq('season', season).eq('email_state', 'sent');
-  await db.from('goal_club_season_closures').update({ sent_count: count ?? 0, failed_count: failed, ...(failed === 0 ? { status: 'completed', completed_at: new Date().toISOString() } : { status: 'partial' }) }).eq('season', season);
-  return json({ status: failed ? 'partial' : 'completed', season, goals, sent, failed }, failed ? 502 : 200);
+  const {data:states,error:countError}=await db.from('goal_club_invoices').select('email_state').eq('season',season);
+  if(countError) throw countError;
+  const count=(states??[]).filter(i=>i.email_state==='sent').length;
+  const outstanding=(states??[]).length-count;
+  const {error:finishError}=await db.from('goal_club_season_closures').update({ sent_count:count, failed_count:outstanding, ...(outstanding === 0 ? { status: 'completed', completed_at: new Date().toISOString() } : { status: 'partial' }) }).eq('season', season);
+  if(finishError) throw finishError;
+  return json({ status: outstanding ? 'partial' : 'completed', season, goals, sent, failed:outstanding }, outstanding ? 502 : 200);
   } catch (error) { return json({error:error instanceof Error?error.message:'Uventet intern feil'},500); }
 });

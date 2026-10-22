@@ -1,0 +1,1 @@
+export function deliverRecorded<I,R>(dependencies: {recordIntent:()=>Promise<I>;send:()=>Promise<R>;recordOutcome:(intent:I,result:R)=>Promise<void>}):Promise<R>;

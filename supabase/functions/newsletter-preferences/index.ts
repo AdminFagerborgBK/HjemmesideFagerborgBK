@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
+import { verifyNewsletterToken } from '../_shared/newsletterToken.mjs';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,27 +17,29 @@ const json = (body: unknown, status = 200) =>
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== 'POST') return json({error:'Method not allowed'},405);
 
   try {
     const body = await req.json();
     const action: string = body?.action ?? "get";
-    const memberId: string = body?.id ?? "";
-    const email: string = body?.email ?? "";
-
-    if (!memberId || !email) return json({ error: "Ugyldig lenke" }, 400);
+    const signingKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!signingKey) throw new Error('Tjenesten er ikke konfigurert');
+    const memberId = await verifyNewsletterToken(body?.token, signingKey);
+    if (!memberId) return json({ error: "Lenken er ugyldig eller utløpt. Bruk lenken fra et nyere nyhetsbrev." }, 403);
 
     const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      signingKey,
     );
 
-    const { data: member } = await serviceClient
+    const { data: member, error: readError } = await serviceClient
       .from("memberships")
       .select("id, email, first_name, last_name, membership_type, status, newsletter_opt_out, interests, team_group")
       .eq("id", memberId)
       .maybeSingle();
 
-    if (!member || member.email.toLowerCase() !== email.toLowerCase()) {
+    if (readError) throw readError;
+    if (!member) {
       return json({ error: "Kunne ikke bekrefte identiteten din. Kontakt post@fagerborgbk.no." }, 403);
     }
 
@@ -65,10 +68,11 @@ serve(async (req) => {
         .eq("id", memberId);
       if (error) throw error;
 
-      await serviceClient.from("activity_log").insert({
+      const {error:logError} = await serviceClient.from("activity_log").insert({
         type: optOut ? "newsletter_unsubscribe" : "newsletter_preferences_updated",
         payload: { member_id: memberId, opt_out: optOut, interests },
       });
+      if (logError) throw logError;
 
       return json({ success: true, newsletter_opt_out: optOut, interests });
     }

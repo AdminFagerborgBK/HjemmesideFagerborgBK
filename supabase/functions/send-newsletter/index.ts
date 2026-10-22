@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
 import { deliveryOutcome, assertTestRecipient } from './policy.ts';
+import { issueNewsletterToken } from '../_shared/newsletterToken.mjs';
+import { deliverRecorded } from './delivery.mjs';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -161,7 +163,6 @@ serve(async (req) => {
 
     let sentCount = 0;
     const errors: string[] = [];
-    const recipientLog: any[] = [];
 
     // Claim once so concurrent requests cannot send the list twice.
     const {data:claimed,error:claimError}=await serviceClient.from('newsletters').update({delivery_state:'sending'}).eq('id',newsletter_id).eq('delivery_state','idle').select('id');
@@ -173,13 +174,23 @@ serve(async (req) => {
       const batch = members.slice(i, i + 10);
       const results = await Promise.allSettled(
         batch.map(async (member: any) => {
-          const base = `${SITE_URL}/nyhetsbrev?id=${member.id}&email=${encodeURIComponent(member.email)}`;
-          const unsubscribeUrl = `${base}&avmeld=1`;
+          const token = await issueNewsletterToken(member.id, serviceRoleKey);
+          const base = `${SITE_URL}/nyhetsbrev#token=${token}`;
+          const unsubscribeUrl = base;
           const preferencesUrl = base;
+          // Persist intent before contacting the provider. Unknown outcomes stay
+          // visible and the whole campaign is blocked from automatic replay.
           const personalizedHtml = withFooter(newsletter.body_html)
             .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, unsubscribeUrl)
             .replace(/\{\{PREFERENCES_URL\}\}/g, preferencesUrl);
 
+          await deliverRecorded({
+            recordIntent: async()=>{
+              const {data:delivery,error:intentError}=await serviceClient.from('newsletter_recipients').insert({newsletter_id,membership_id:member.id,email:member.email,name:member.first_name??null,status:'pending'}).select('id').single();
+              if(intentError || !delivery) throw intentError ?? new Error('Could not record delivery intent');
+              return delivery;
+            },
+            send: async()=>{
           const res = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: {
@@ -197,22 +208,16 @@ serve(async (req) => {
 
           if (!res.ok) {
             const errText = await res.text();
-            recipientLog.push({
-              newsletter_id,
-              membership_id: member.id,
-              email: member.email,
-              name: member.first_name ?? null,
-              status: "failed",
-              error: errText.slice(0, 500),
-            });
-            throw new Error(`Failed for ${member.email}: ${errText}`);
+            return {ok:false,id:null as string|null,error:errText.slice(0,500)};
           }
-          recipientLog.push({
-            newsletter_id,
-            membership_id: member.id,
-            email: member.email,
-            name: member.first_name ?? null,
-            status: "sent",
+          const provider=await res.json();
+          return {ok:true,id:typeof provider.id==='string'?provider.id:null,error:null as string|null};
+            },
+            recordOutcome: async(delivery: {id:string},result: {ok:boolean;id:string|null;error:string|null})=>{
+              const {error:persistError}=await serviceClient.from('newsletter_recipients').update({status:result.ok?'sent':'failed',error:result.ok?(result.id?`provider_id:${result.id}`:null):result.error}).eq('id',delivery.id);
+              if(persistError) throw new Error(`Delivery ${result.id??'unknown'} needs reconciliation for recipient ${delivery.id}`);
+              if(!result.ok) throw new Error(`Email provider rejected delivery: ${result.error}`);
+            },
           });
           return member.email;
         })
@@ -228,22 +233,18 @@ serve(async (req) => {
       }
     }
 
-    if (recipientLog.length) {
-      const { error: logErr } = await serviceClient.from("newsletter_recipients").insert(recipientLog);
-      if (logErr) throw logErr;
-    }
-
     const outcome=deliveryOutcome(sentCount,errors.length);
     const {error:stateError}=await serviceClient
       .from("newsletters")
       .update({ delivery_state: outcome.status, status:outcome.success?'sent':newsletter.status, sent_at: outcome.success?new Date().toISOString():null, sent_count: sentCount })
-      .eq("id", newsletter_id);
+      .eq("id", newsletter_id).eq('delivery_state','sending');
     if(stateError) throw stateError;
 
-    await serviceClient.from("activity_log").insert({
+    const {error:activityError}=await serviceClient.from("activity_log").insert({
       type: "newsletter_sent",
       payload: { newsletter_id, subject: newsletter.subject, sent_count: sentCount, errors: errors.length },
     });
+    if(activityError) throw activityError;
 
     return new Response(JSON.stringify({ ...outcome, errors }), {
       status: outcome.success ? 200 : 502,

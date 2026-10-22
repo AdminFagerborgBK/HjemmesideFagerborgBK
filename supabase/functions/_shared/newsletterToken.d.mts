@@ -1,0 +1,2 @@
+export function issueNewsletterToken(memberId: string, secret: string, now?: number): Promise<string>;
+export function verifyNewsletterToken(token: unknown, secret: string, now?: number): Promise<string | null>;

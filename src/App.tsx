@@ -3,7 +3,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { Helmet } from 'react-helmet-async';
 import Index from "./pages/Index";
 const NewsArchive = lazy(() => import('./pages/NewsArchive'));
 const NewsArticle = lazy(() => import('./pages/NewsArticle'));
@@ -76,12 +77,19 @@ const queryClient = new QueryClient({
   },
 });
 
+const PrivateRouteMetadata = () => {
+  const {pathname} = useLocation();
+  const privatePage = /^\/(admin|auth)(\/|$)/.test(pathname) || ['/spillerinnmelding','/nyhetsbrev'].includes(pathname);
+  return privatePage ? <Helmet><meta name="robots" content="noindex, nofollow"/><meta name="referrer" content="no-referrer"/></Helmet> : null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <PrivateRouteMetadata />
         <ScrollToTop />
         <Suspense fallback={<main className="min-h-dvh pt-28" aria-busy="true"><div className="container mx-auto px-4" role="status">Laster…</div></main>}>
         <Routes>

@@ -16,6 +16,10 @@ interface TokenDebugData {
   error?: { message: string; code: number };
 }
 
+const redact = (value: unknown) => String(value)
+  .replace(/([?&](?:access_token|input_token|client_secret|code|fb_exchange_token)=)[^&\s)]+/gi, '$1[redacted]')
+  .replace(/\bEAA[A-Za-z0-9_-]+\b/g, '[redacted]');
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -87,8 +91,7 @@ serve(async (req) => {
             JSON.stringify({
               success: true,
               status: "expired",
-              message: meResult.error?.message || "Token er ugyldig eller utløpt",
-              token_prefix: pageAccessToken.substring(0, 10) + "...",
+              message: redact(meResult.error?.message || "Token er ugyldig eller utløpt"),
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -103,7 +106,6 @@ serve(async (req) => {
             page_id: meResult.id,
             expires_at: null,
             is_permanent: true, // Can't determine without debug_token
-            token_prefix: pageAccessToken.substring(0, 10) + "...",
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -157,7 +159,6 @@ serve(async (req) => {
           scopes: debugData.scopes,
           page_name: pageName,
           page_id: pageId,
-          token_prefix: pageAccessToken.substring(0, 10) + "...",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -193,7 +194,7 @@ serve(async (req) => {
       );
       const tokenResult = await tokenResp.json();
       if (!tokenResp.ok || tokenResult.error) {
-        throw new Error(`OAuth-utveksling feilet: ${tokenResult.error?.message || JSON.stringify(tokenResult)}`);
+        throw new Error(`OAuth-utveksling feilet: ${tokenResult.error?.message || 'Provider returned an invalid response'}`);
       }
       const shortLivedToken = tokenResult.access_token;
       console.log("[facebook-token-health] Got short-lived user token from OAuth");
@@ -204,7 +205,7 @@ serve(async (req) => {
       );
       const longLivedResult = await longLivedResp.json();
       if (!longLivedResp.ok || longLivedResult.error) {
-        throw new Error(`Kunne ikke utveksle token: ${longLivedResult.error?.message || JSON.stringify(longLivedResult)}`);
+        throw new Error(`Kunne ikke utveksle token: ${longLivedResult.error?.message || 'Provider returned an invalid response'}`);
       }
       const longLivedToken = longLivedResult.access_token;
       console.log("[facebook-token-health] Got long-lived user token");
@@ -214,7 +215,7 @@ serve(async (req) => {
         `https://graph.facebook.com/v21.0/me?access_token=${longLivedToken}&fields=id,name`
       );
       const meResult = await meResp.json();
-      console.log("[facebook-token-health] User:", JSON.stringify(meResult));
+      console.log("[facebook-token-health] User:", 'Provider returned an invalid response');
 
       // Step 4: Get permanent page token via /accounts
       const pagesResp = await fetch(
@@ -243,18 +244,19 @@ serve(async (req) => {
       const isPermanent = verifyResult.data?.expires_at === 0;
 
       // Save token to site_settings so it persists
-      await supabase
+      const {error:saveError}=await supabase
         .from("site_settings")
         .upsert(
           { key: "facebook_page_access_token", value: permanentPageToken, updated_at: new Date().toISOString() },
           { onConflict: "key" }
         );
+      if(saveError) throw new Error(`Tokenlagring feilet: ${saveError.message}`);
       console.log("[facebook-token-health] Saved new token to site_settings");
 
       return new Response(
         JSON.stringify({
           success: true,
-          new_token: permanentPageToken,
+          token_saved: true,
           page_name: targetPage.name,
           page_id: targetPage.id,
           is_permanent: isPermanent,
@@ -285,7 +287,7 @@ serve(async (req) => {
 
       if (!longLivedResp.ok || longLivedResult.error) {
         throw new Error(
-          `Kunne ikke utveksle token: ${longLivedResult.error?.message || JSON.stringify(longLivedResult)}`
+          `Kunne ikke utveksle token: ${longLivedResult.error?.message || 'Provider returned an invalid response'}`
         );
       }
 
@@ -297,11 +299,11 @@ serve(async (req) => {
         `https://graph.facebook.com/v21.0/me?access_token=${longLivedToken}&fields=id,name`
       );
       const meResult = await meResp.json();
-      console.log("[facebook-token-health] /me result:", JSON.stringify(meResult));
+      console.log("[facebook-token-health] /me result:", 'Provider returned an invalid response');
       
       if (!meResp.ok || meResult.error) {
         throw new Error(
-          `Kunne ikke verifisere token: ${meResult.error?.message || JSON.stringify(meResult)}`
+          `Kunne ikke verifisere token: ${meResult.error?.message || 'Provider returned an invalid response'}`
         );
       }
 
@@ -312,7 +314,7 @@ serve(async (req) => {
       const debugResult = await debugResp.json();
       const tokenIsPermanent = debugResult.data?.expires_at === 0;
       const tokenType = debugResult.data?.type;
-      console.log("[facebook-token-health] Debug:", JSON.stringify(debugResult.data));
+      console.log("[facebook-token-health] Debug:", JSON.stringify({is_valid:debugResult.data?.is_valid,expires_at:debugResult.data?.expires_at}));
 
       // If /me returns the page ID, the input was a page token
       if (meResult.id === pageId) {
@@ -320,18 +322,19 @@ serve(async (req) => {
         
         if (tokenIsPermanent) {
           // Save to site_settings
-          await supabase
+          const {error:saveError}=await supabase
             .from("site_settings")
             .upsert(
               { key: "facebook_page_access_token", value: longLivedToken, updated_at: new Date().toISOString() },
               { onConflict: "key" }
             );
+          if(saveError) throw new Error(`Tokenlagring feilet: ${saveError.message}`);
           console.log("[facebook-token-health] Saved page token to site_settings");
 
           return new Response(
             JSON.stringify({
               success: true,
-              new_token: longLivedToken,
+              token_saved: true,
               page_name: meResult.name,
               page_id: meResult.id,
               is_permanent: true,
@@ -359,11 +362,11 @@ serve(async (req) => {
         `https://graph.facebook.com/v21.0/${userId}/accounts?access_token=${longLivedToken}`
       );
       const pagesResult = await pagesResp.json();
-      console.log("[facebook-token-health] Pages result:", JSON.stringify(pagesResult));
+      console.log("[facebook-token-health] Pages result:", 'Provider returned an invalid response');
 
       if (!pagesResp.ok || pagesResult.error) {
         throw new Error(
-          `Kunne ikke hente sider (kode ${pagesResult.error?.code}): ${pagesResult.error?.message || JSON.stringify(pagesResult)}`
+          `Kunne ikke hente sider (kode ${pagesResult.error?.code}): ${pagesResult.error?.message || 'Provider returned an invalid response'}`
         );
       }
       
@@ -397,18 +400,19 @@ serve(async (req) => {
       const isPermanent = verifyResult.data?.expires_at === 0;
 
       // Save token to site_settings
-      await supabase
+      const {error:saveError}=await supabase
         .from("site_settings")
         .upsert(
           { key: "facebook_page_access_token", value: permanentPageToken, updated_at: new Date().toISOString() },
           { onConflict: "key" }
         );
+      if(saveError) throw new Error(`Tokenlagring feilet: ${saveError.message}`);
       console.log("[facebook-token-health] Saved exchange token to site_settings");
 
       return new Response(
         JSON.stringify({
           success: true,
-          new_token: permanentPageToken,
+          token_saved: true,
           page_name: targetPage.name,
           page_id: targetPage.id,
           is_permanent: isPermanent,
@@ -422,8 +426,8 @@ serve(async (req) => {
 
     throw new Error(`Ukjent action: ${action}`);
   } catch (error) {
-    console.error("[facebook-token-health] Error:", error);
-    const msg = error instanceof Error ? error.message : "Ukjent feil";
+    const msg = redact(error instanceof Error ? error.message : "Ukjent feil");
+    console.error("[facebook-token-health] Error:", msg);
     return new Response(
       JSON.stringify({ success: false, error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

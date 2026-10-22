@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2, Mail, MailX, CheckCircle2 } from 'lucide-react';
@@ -22,9 +23,8 @@ const INTERESTS: { value: string; label: string; description: string }[] = [
 
 const NewsletterPreferences = () => {
   const [params] = useSearchParams();
-  const id = params.get('id') || '';
-  const email = params.get('email') || '';
-  const autoUnsubscribe = params.get('avmeld') === '1';
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') || params.get('token') || '');
+  const [email, setEmail] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,15 +36,21 @@ const NewsletterPreferences = () => {
 
   const call = async (action: 'get' | 'update', extra: Record<string, unknown> = {}) => {
     const { data, error: fnError } = await supabase.functions.invoke('newsletter-preferences', {
-      body: { action, id, email, ...extra },
+      body: { action, token, ...extra },
     });
-    if (fnError) throw new Error('Kunne ikke koble til tjenesten. Prøv igjen senere.');
+    if (fnError) {
+      if (fnError instanceof FunctionsHttpError && fnError.context.status === 403) {
+        throw new Error('Lenken er ugyldig eller utløpt. Bruk lenken fra ditt nyeste nyhetsbrev, eller kontakt post@fagerborgbk.no for hjelp med avmelding.');
+      }
+      throw new Error('Kunne ikke koble til tjenesten. Prøv igjen senere.');
+    }
     if ((data as any)?.error) throw new Error((data as any).error);
     return data as any;
   };
 
   useEffect(() => {
-    if (!id || !email) {
+    if (token) window.history.replaceState(null, '', window.location.pathname);
+    if (!token) {
       setError('Lenken mangler informasjon. Bruk lenken fra nyhetsbrevet, eller kontakt post@fagerborgbk.no.');
       setLoading(false);
       return;
@@ -53,14 +59,9 @@ const NewsletterPreferences = () => {
       try {
         const data = await call('get');
         setFirstName(data.member.first_name || '');
+        setEmail(data.member.email || '');
         setInterests(data.member.interests || []);
-        if (autoUnsubscribe) {
-          await call('update', { newsletter_opt_out: true, interests: data.member.interests || [] });
-          setSubscribed(false);
-          setSaved(true);
-        } else {
-          setSubscribed(!data.member.newsletter_opt_out);
-        }
+        setSubscribed(!data.member.newsletter_opt_out);
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -68,7 +69,7 @@ const NewsletterPreferences = () => {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, email]);
+  }, [token]);
 
   const save = async (nextSubscribed = subscribed) => {
     setSaving(true);
@@ -92,7 +93,8 @@ const NewsletterPreferences = () => {
       <Helmet>
         <title>Nyhetsbrev-innstillinger | Fagerborg BK</title>
         <meta name="description" content="Styr om du vil motta nyhetsbrev fra Fagerborg BK, og hvilke temaer du er interessert i." />
-        <meta name="robots" content="noindex" />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="referrer" content="no-referrer" />
       </Helmet>
       <Header />
 

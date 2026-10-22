@@ -20,76 +20,22 @@ Tokens are generated only in memory; the database retains SHA-256 hashes. Existi
 
 Use `bun install --frozen-lockfile` and `bun run build`; `bun.lock` is authoritative. Never export `.env`, dependencies, build output, private metadata or Python caches. Existing Supabase migrations and later Drizzle migrations are both required, in their own chronological histories; then execute `scripts/setup/sports-season-seed.sql` once to bootstrap an empty configuration without changing existing settings. Git sync alone neither applies Cloud migrations nor deploys functions. A fresh rebuild and GitHub checkout are not verified until the roadmap records their evidence.
 
-## Original project setup reference
+## Operations and safe recovery
 
-## Project info
+Project: https://lovable.dev/projects/c8e1877c-4d90-4ea9-b9a9-92c784fb24b1
+Published site: https://fagerborgbk.no
+Repository: https://github.com/AdminFagerborgBK/HjemmesideFagerborgBK
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+GitHub Actions requires existing secrets named `SUPABASE_PROJECT_URL`, `MATCHES_SYNC_SECRET`, and `GRASROT_UPSERT_SECRET`; never commit their values. The monthly newsletter currently reuses `MATCHES_SYNC_SECRET`. Dedicated newsletter credentials require a coordinated server/workflow change, not removal from one side alone. Preserve Sports `0 */3 * * *`, Grasrot `7 12 * * *`, weekly maintenance and monthly newsletter. Database `cron.job` must remain empty in normal operation.
 
-## How can I edit this code?
+Never dispatch the monthly newsletter workflow to test it: it sends to the real list. Use the signed-in administrator's test recipient, count-only reads and injected tests. Signed preference links expire; legacy ID/email links no longer authorize changes and direct members to contact the club. If a campaign is `sending` or `partial`, inspect recipient intents and provider outcomes before deliberately recovering; do not blindly reset delivery state.
 
-There are several ways of editing your application.
+Goal-club invoices are atomically claimed before provider delivery. Interrupted or uncertain `sending` rows are blocked; reconcile provider outcomes before changing state. Definite rejection can be retried. A bank message reference is not a bank-approved KID; KID/DNB automation requires the club's bank agreement.
 
-**Use Lovable**
+The separate player project is https://lovable.dev/projects/c03d7dcc-2465-440d-9038-10741bcf8fac at https://spiller.fagerborgbk.no. Its inspected `my-agreement` caller still requires a personal link and does not send the club's server-only shared key for automatic confirmed-email lookup. Implementation and authenticated verification must continue in that project; do not move its domain here.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+Board decisions: 2027 fees/due dates, legal approval of the player agreement, and supported bank/Spond access. Self-confirmation never establishes verified payment or playing eligibility.
 
-Changes made via Lovable will be committed automatically to this repo.
+Apply ALL `supabase/migrations` before ANY `drizzle/migrations`, then the sports seed. A generic empty PostgreSQL database is not a managed Cloud baseline: auth/storage plus pg_cron/pg_net must exist. `scripts/setup/replay-schema.mjs` verifies application-schema construction using explicitly inert platform/crypto stubs; it does not verify managed extension behavior or cryptography. Frontend builds need deployment-specific public environment values, excluded from GitHub.
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Publishing the frontend remains a separate explicit action. Backend migrations and function deployments already affect the published site. See `handover-verification.md` for dated evidence and remaining checks.

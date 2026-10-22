@@ -127,6 +127,20 @@
       "when": 1792672758803,
       "tag": "0017_newsletter_monthly_uniqueness",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792682010904,
+      "tag": "0018_restrict_scheduling_rpc_execution",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792682651201,
+      "tag": "0019_goal_club_atomic_invoice_claim",
+      "breakpoints": true
     }
   ]
 }

@@ -164,6 +164,7 @@ export type Database = {
           created_at: string
           due_date: string
           email: string
+          email_attempt_at: string | null
           email_error: string | null
           email_id: string | null
           email_state: string
@@ -183,6 +184,7 @@ export type Database = {
           created_at?: string
           due_date: string
           email: string
+          email_attempt_at?: string | null
           email_error?: string | null
           email_id?: string | null
           email_state?: string
@@ -202,6 +204,7 @@ export type Database = {
           created_at?: string
           due_date?: string
           email?: string
+          email_attempt_at?: string | null
           email_error?: string | null
           email_id?: string | null
           email_state?: string
@@ -2017,6 +2020,35 @@ export type Database = {
       }
     }
     Functions: {
+      claim_goal_club_invoice: {
+        Args: { _id: string }
+        Returns: {
+          amount_per_goal: number
+          created_at: string
+          due_date: string
+          email: string
+          email_attempt_at: string | null
+          email_error: string | null
+          email_id: string | null
+          email_state: string
+          entry_id: string
+          goals: number
+          id: string
+          is_winner: boolean
+          name: string
+          paid_at: string | null
+          reference: string
+          season: number
+          sent_at: string | null
+          total_nok: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "goal_club_invoices"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_instagram_feed_refresh: {
         Args: { p_account: string; p_lease_id: string }
         Returns: boolean
