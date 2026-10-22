@@ -5,6 +5,8 @@ import Seo from '@/components/Seo';
 import Footer from '@/components/Footer';
 import { useSportsSeason, teamConfig } from '@/hooks/useSportsSeason';
 import { useStandings } from '@/hooks/useStandings';
+import { useSportsSeasons } from '@/hooks/useSportsSeasons';
+import { availableYears } from '@/lib/seasonYears';
 import { useDivisionMatches, type DivisionMatch } from '@/hooks/useDivisionMatches';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -255,9 +257,9 @@ const buildVenueTable = (
   );
 };
 
-const LeagueTableContent = ({ team }: { team: 'A-laget' | 'B-laget' }) => {
-  const { data: standings, isLoading } = useStandings(team);
-  const {data:config}=useSportsSeason();
+const LeagueTableContent = ({ team, season }: { team: 'A-laget' | 'B-laget'; season?: number }) => {
+  const { data: standings, isLoading } = useStandings(team, season);
+  const {data:config}=useSportsSeason(season);
   const selected=config?teamConfig(config,team):undefined;
   const { data: divisionMatches } = useDivisionMatches(selected?.tournament_id);
   const supportsExplorer = !!selected;
@@ -562,6 +564,11 @@ const LeagueTableContent = ({ team }: { team: 'A-laget' | 'B-laget' }) => {
 };
 
 const LeagueTableFull = () => {
+  const { data: active } = useSportsSeason();
+  const { data: seasons } = useSportsSeasons();
+  const [picked, setPicked] = useState<number | null>(null);
+  const season = picked ?? active?.season;
+  const years = availableYears(seasons ?? [], active?.season);
   return (
     <div className="min-h-screen bg-background">
       <Seo
@@ -580,16 +587,22 @@ const LeagueTableFull = () => {
 
         <section className="py-6 md:py-12">
           <div className="container mx-auto px-4 max-w-6xl">
+            <div className="mb-4 flex justify-end">
+              <Select value={season !== undefined ? String(season) : undefined} onValueChange={v => setPicked(Number(v))}>
+                <SelectTrigger className="h-9 w-24" aria-label="Velg sesong"><SelectValue placeholder="År" /></SelectTrigger>
+                <SelectContent>{years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <Tabs defaultValue="a-laget" className="w-full">
               <TabsList className="grid w-full max-w-xs md:max-w-md grid-cols-2 mb-6 md:mb-8">
                 <TabsTrigger value="a-laget" className="text-sm md:text-base">A-laget</TabsTrigger>
                 <TabsTrigger value="b-laget" className="text-sm md:text-base">B-laget</TabsTrigger>
               </TabsList>
               <TabsContent value="a-laget">
-                <LeagueTableContent team="A-laget" />
+                <LeagueTableContent key={`A-${season}`} team="A-laget" season={season} />
               </TabsContent>
               <TabsContent value="b-laget">
-                <LeagueTableContent team="B-laget" />
+                <LeagueTableContent key={`B-${season}`} team="B-laget" season={season} />
               </TabsContent>
             </Tabs>
 

@@ -22,8 +22,8 @@ export interface Standing {
   team_url: string | null;
 }
 
-export const useStandings = (team: 'A-laget' | 'B-laget') => {
-  const {data:config}=useSportsSeason();
+export const useStandings = (team: 'A-laget' | 'B-laget', season?: number) => {
+  const {data:config}=useSportsSeason(season);
   return useQuery({
     enabled:!!config,
     queryKey: ['standings', team,config?.season],

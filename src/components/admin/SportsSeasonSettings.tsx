@@ -48,7 +48,7 @@ export default function SportsSeasonSettings() {
     </div>
     <Select onValueChange={value=>{const row=seasons?.find(s=>s.season===Number(value));if(row)setDraft(validateSportsSeason(row));setMessage('');}}>
       <SelectTrigger className="w-48" aria-label="Rediger sportssesong"><SelectValue placeholder="Velg sesong"/></SelectTrigger>
-      <SelectContent>{seasons?.map(s=><SelectItem key={s.season} value={String(s.season)}>{s.season}{s.is_active?' · aktiv':''}</SelectItem>)}</SelectContent>
+      <SelectContent>{seasons?.map(s=><SelectItem key={s.season} value={String(s.season)}>{s.season}{s.is_active?' · aktiv':''}{s.config_source==='discovered'?' · automatisk funnet fra fotball.no':' · manuelt konfigurert'}</SelectItem>)}</SelectContent>
     </Select>
     {draft&&<div className="space-y-4">
       <div className="max-w-48 space-y-2"><Label htmlFor="sports-season">Sesong</Label><Input id="sports-season" type="number" min={2000} max={2200} disabled={busy||draft.season===active?.season} value={draft.season} onChange={e=>setDraft({...draft,season:Number(e.target.value)})}/></div>

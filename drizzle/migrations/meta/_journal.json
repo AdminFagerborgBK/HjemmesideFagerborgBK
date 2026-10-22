@@ -148,6 +148,13 @@
       "when": 1792685079943,
       "tag": "0020_sports_season_admin_activation_and_explicit_enrollment",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792694541326,
+      "tag": "0021_sports_season_config_source",
+      "breakpoints": true
     }
   ]
 }

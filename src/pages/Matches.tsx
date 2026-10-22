@@ -5,6 +5,10 @@ import Header from '@/components/Header';
 import Seo from '@/components/Seo';
 import Footer from '@/components/Footer';
 import { useMatches } from '@/hooks/useMatches';
+import { useSportsSeason } from '@/hooks/useSportsSeason';
+import { useSportsSeasons } from '@/hooks/useSportsSeasons';
+import { availableYears, osloYear } from '@/lib/seasonYears';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOpponentLogos, findOpponentLogo, getOpponentDisplayName } from '@/hooks/useOpponentLogos';
 import { useSiteVideos } from '@/hooks/useSiteVideos';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -42,6 +46,14 @@ const Matches = () => {
   const [highlightedMatchId, setHighlightedMatchId] = useState<string | null>(null);
   const hasScrolledRef = useRef(false);
   const { data: allMatches, isLoading } = useMatches(activeTeam);
+  const { data: activeSeason } = useSportsSeason();
+  const { data: seasons } = useSportsSeasons();
+  const [pickedYear, setPickedYear] = useState<number | null>(null);
+  const selectedYear = pickedYear ?? activeSeason?.season;
+  const years = useMemo(
+    () => availableYears(seasons ?? [], activeSeason?.season, (allMatches ?? []).map(m => m.match_date)),
+    [seasons, activeSeason, allMatches]
+  );
   const { data: logoMap } = useOpponentLogos();
   const { data: allVideos } = useSiteVideos();
   const matchRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -89,6 +101,7 @@ const Matches = () => {
 
   const filteredMatches = useMemo(() => {
     const filtered = allMatches?.filter(match => {
+      if (selectedYear !== undefined && osloYear(match.match_date) !== selectedYear) return false;
       if (activeStatus === 'upcoming') return match.status === 'upcoming' && !(match as any).is_cancelled;
       if (activeStatus === 'finished') return match.status === 'finished';
       return true; // 'all'
@@ -98,7 +111,7 @@ const Matches = () => {
       return [...filtered].sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime());
     }
     return filtered;
-  }, [allMatches, activeStatus]);
+  }, [allMatches, activeStatus, selectedYear]);
 
   // Scroll to and highlight a specific match (from URL param or last finished) — only once
   useEffect(() => {
@@ -177,8 +190,16 @@ const Matches = () => {
                 ))}
               </div>
 
-              {/* Status Tabs */}
-              <div className="flex gap-2">
+              {/* Year + Status */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={selectedYear !== undefined ? String(selectedYear) : undefined} onValueChange={v => setPickedYear(Number(v))}>
+                  <SelectTrigger className="h-9 w-24 text-xs md:text-sm" aria-label="Velg år">
+                    <SelectValue placeholder="År" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 {[
                   { key: 'all', label: 'Alle' },
                   { key: 'upcoming', label: 'Kommende' },

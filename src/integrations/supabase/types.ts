@@ -1596,6 +1596,7 @@ export type Database = {
       }
       sports_seasons: {
         Row: {
+          config_source: string
           created_at: string
           is_active: boolean
           season: number
@@ -1604,6 +1605,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          config_source?: string
           created_at?: string
           is_active?: boolean
           season: number
@@ -1612,6 +1614,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          config_source?: string
           created_at?: string
           is_active?: boolean
           season?: number

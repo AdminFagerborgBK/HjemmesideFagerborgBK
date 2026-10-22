@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main, loadTeamPage, SourceUnavailableError, fingerprint, configuredTeams } from './scraper.mjs';
+import { main, loadTeamPage, SourceUnavailableError, fingerprint, configuredTeams, postToSupabase } from './scraper.mjs';
 
 const matches = [{ team: 'A-laget', fiks_id: '123', opponent: 'Test' }];
 const config = { SUPABASE_PROJECT_URL: 'https://backend.example', MATCHES_SYNC_SECRET: 'test-only' };
@@ -135,4 +135,10 @@ test('successful changed data updates fingerprint after backend success', async 
   assert.equal(result.calls, 1);
   assert.equal(result.fingerprint, fingerprint(matches));
   assert.match(result.output, /scrape_success=true/);
+});
+test('NM qualification match keeps the exact fotball.no competition name (never a league tournament)', async () => {
+  let sent;
+  const nm = { team: 'A-laget', fiks_id: '9999', opponent: 'Test', match_date: '2027-04-01T16:00:00.000Z', competition: 'NM Menn 2028 kvalifisering' };
+  await postToSupabase([nm], config, async (_url, options) => { sent = JSON.parse(options.body); return new Response(JSON.stringify({ updated_count: 1 }), { status: 200 }); });
+  assert.equal(sent.matches[0].competition, 'NM Menn 2028 kvalifisering');
 });

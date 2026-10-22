@@ -36,8 +36,22 @@ jobs:
       - name: Install reader
         run: python3 -m pip install --quiet openpyxl
 
+      # GitHub-only: reads the stable team pages (311/6458) once a day after
+      # New Year until the next league season is unambiguous on fotball.no.
+      # The backend is only contacted when both teams are validated.
+      - name: Discover next league season
+        id: discover
+        env:
+          SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
+          MATCHES_SYNC_SECRET: ${{ secrets.MATCHES_SYNC_SECRET }}
+          FORCE_SYNC: ${{ inputs.force }}
+        working-directory: scripts/fingerprint
+        run: python3 discover.py
+
       - name: Validate sources and sync both datasets
         id: sync
+        # After a new activation the checked-out manifest is stale; next run syncs.
+        if: steps.discover.outputs.activated != 'true'
         env:
           SUPABASE_PROJECT_URL: ${{ secrets.SUPABASE_PROJECT_URL }}
           MATCHES_SYNC_SECRET: ${{ secrets.MATCHES_SYNC_SECRET }}
@@ -45,7 +59,7 @@ jobs:
         run: python3 scripts/fingerprint/sync.py sports
 
       - name: Save fingerprint
-        if: steps.sync.outputs.synced == 'true'
+        if: steps.discover.outputs.activated != 'true' && steps.sync.outputs.synced == 'true'
         uses: actions/cache/save@v4
         with:
           path: fingerprint.txt

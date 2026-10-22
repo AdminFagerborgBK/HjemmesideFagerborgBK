@@ -28,3 +28,4 @@
 - [x] Google Search Console: fagerborgbk.no verifisert som siteOwner 22.10; sitemap lest tilbake med 0 feil/varsler og 17 URL-er. Ingen ny publisering nødvendig.
 
 - [x] Overleveringsherding: ny sikker goal-club-trigger, atomisk 12+10 standings-RPC, begge divisjoner, målrettede tester, live deploy og én force Sports-kjøring med GitHub-verifisering.
+- [x] Automatisk sesongdiscovery fra lag 311/6458 (GitHub, daglig etter nyttår), manuell turnerings-ID som fallback; år-filter på /kamper og /tabell; B-laget 2026 satt til nedrykk.
