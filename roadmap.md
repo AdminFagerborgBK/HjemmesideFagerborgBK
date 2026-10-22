@@ -19,4 +19,4 @@
 - [x] Supabase Data API grants (30. okt): audit + eksplisitt grant-migrasjon for alle public-tabeller, regel i AGENTS.md, verifiser live DB/GitHub
 - [ ] Google Search Console: verifiseringskode lagt inn, venter på publisering -> verify + sitemap
 
-- [ ] Overleveringsherding: ny sikker goal-club-trigger, atomisk 12+10 standings-RPC, begge divisjoner, målrettede tester, live deploy og én force Sports-kjøring med GitHub-verifisering.
+- [x] Overleveringsherding: ny sikker goal-club-trigger, atomisk 12+10 standings-RPC, begge divisjoner, målrettede tester, live deploy og én force Sports-kjøring med GitHub-verifisering.
