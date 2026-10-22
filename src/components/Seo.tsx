@@ -34,6 +34,7 @@ const Seo = ({ title, description, path, image, type = 'website', noindex, jsonL
       {image && <meta property="og:image" content={image} />}
 
       <meta name="twitter:title" content={title} />
+      <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:description" content={description} />
       {image && <meta name="twitter:image" content={image} />}
 

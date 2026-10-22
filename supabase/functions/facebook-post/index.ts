@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
+import { providerFailure } from '../_shared/providerFailure.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -94,16 +95,14 @@ serve(async (req) => {
       const fbResult = await fbResponse.json();
 
       if (!fbResponse.ok) {
-        console.error("[facebook-post] Facebook DELETE error:", fbResult);
+        console.error(providerFailure('Facebook', fbResponse.status));
         // If the post doesn't exist or we lack permissions, treat as already deleted
         const errorCode = fbResult.error?.code;
         const errorSubcode = fbResult.error?.error_subcode;
         if (errorCode === 100 || errorCode === 200) {
           console.log("[facebook-post] Post not found or no access — treating as already deleted");
         } else {
-          throw new Error(
-            `Facebook API feil: ${fbResult.error?.message || JSON.stringify(fbResult)}`
-          );
+          throw new Error(providerFailure('Facebook', fbResponse.status));
         }
       }
 
@@ -151,7 +150,7 @@ serve(async (req) => {
       );
     } else {
       const postData: Record<string, string> = {
-        message: body.message!,
+        message: body.message ?? '',
         access_token: pageAccessToken,
       };
       if (body.link) {
@@ -171,10 +170,8 @@ serve(async (req) => {
     const fbResult = await fbResponse.json();
 
     if (!fbResponse.ok) {
-      console.error("[facebook-post] Facebook API error:", fbResult);
-      throw new Error(
-        `Facebook API feil: ${fbResult.error?.message || JSON.stringify(fbResult)}`
-      );
+      console.error(providerFailure('Facebook', fbResponse.status));
+      throw new Error(providerFailure('Facebook', fbResponse.status));
     }
 
     const postId = fbResult.id || fbResult.post_id;
@@ -190,7 +187,7 @@ serve(async (req) => {
           : `https://graph.facebook.com/v21.0/${pageId}/photo_stories`;
         const storyPayload: Record<string, string> = body.video_url
           ? { file_url: body.video_url, access_token: pageAccessToken }
-          : { photo_url: body.image_url!, access_token: pageAccessToken };
+          : { photo_url: body.image_url ?? '', access_token: pageAccessToken };
 
         console.log("[facebook-post] Publishing to Facebook story:", storyEndpoint);
         const storyResponse = await fetch(storyEndpoint, {
@@ -201,15 +198,15 @@ serve(async (req) => {
         const storyResult = await storyResponse.json();
 
         if (!storyResponse.ok) {
-          console.error("[facebook-post] Story API error:", storyResult);
-          storyError = storyResult.error?.message || JSON.stringify(storyResult);
+          storyError = providerFailure('Facebook', storyResponse.status);
+          console.error(storyError);
         } else {
           storyId = storyResult.id || storyResult.post_id || null;
           console.log("[facebook-post] Successfully published story:", storyId);
         }
-      } catch (e) {
-        console.error("[facebook-post] Story publish failed:", e);
-        storyError = e instanceof Error ? e.message : "Ukjent story-feil";
+      } catch {
+        console.error('[facebook-post] Story publish failed');
+        storyError = 'Story kunne ikke publiseres. Hovedinnlegget er publisert.';
       }
     }
 
@@ -217,9 +214,9 @@ serve(async (req) => {
       JSON.stringify({ success: true, post_id: postId, story_id: storyId, story_error: storyError }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("[facebook-post] Error:", error);
-    const msg = error instanceof Error ? error.message : "Ukjent feil";
+  } catch {
+    console.error('[facebook-post] Request failed');
+    const msg = 'Facebook-handlingen kunne ikke fullføres. Kontroller tilkoblingen og innlegget før du prøver igjen.';
     return new Response(
       JSON.stringify({ success: false, error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

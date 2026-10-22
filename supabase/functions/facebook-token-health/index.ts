@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
 import { requireAdminOrSecret } from '../_shared/adminAuth.ts';
+import { providerFailure } from '../_shared/providerFailure.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,10 +16,6 @@ interface TokenDebugData {
   type?: string;
   error?: { message: string; code: number };
 }
-
-const redact = (value: unknown) => String(value)
-  .replace(/([?&](?:access_token|input_token|client_secret|code|fb_exchange_token)=)[^&\s)]+/gi, '$1[redacted]')
-  .replace(/\bEAA[A-Za-z0-9_-]+\b/g, '[redacted]');
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -91,7 +88,7 @@ serve(async (req) => {
             JSON.stringify({
               success: true,
               status: "expired",
-              message: redact(meResult.error?.message || "Token er ugyldig eller utløpt"),
+              message: providerFailure('Facebook', meResp.status),
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -194,7 +191,7 @@ serve(async (req) => {
       );
       const tokenResult = await tokenResp.json();
       if (!tokenResp.ok || tokenResult.error) {
-        throw new Error(`OAuth-utveksling feilet: ${tokenResult.error?.message || 'Provider returned an invalid response'}`);
+        throw new Error(providerFailure('Facebook', tokenResp.status));
       }
       const shortLivedToken = tokenResult.access_token;
       console.log("[facebook-token-health] Got short-lived user token from OAuth");
@@ -205,7 +202,7 @@ serve(async (req) => {
       );
       const longLivedResult = await longLivedResp.json();
       if (!longLivedResp.ok || longLivedResult.error) {
-        throw new Error(`Kunne ikke utveksle token: ${longLivedResult.error?.message || 'Provider returned an invalid response'}`);
+        throw new Error(providerFailure('Facebook', longLivedResp.status));
       }
       const longLivedToken = longLivedResult.access_token;
       console.log("[facebook-token-health] Got long-lived user token");
@@ -287,7 +284,7 @@ serve(async (req) => {
 
       if (!longLivedResp.ok || longLivedResult.error) {
         throw new Error(
-          `Kunne ikke utveksle token: ${longLivedResult.error?.message || 'Provider returned an invalid response'}`
+          providerFailure('Facebook', longLivedResp.status)
         );
       }
 
@@ -303,7 +300,7 @@ serve(async (req) => {
       
       if (!meResp.ok || meResult.error) {
         throw new Error(
-          `Kunne ikke verifisere token: ${meResult.error?.message || 'Provider returned an invalid response'}`
+          providerFailure('Facebook', meResp.status)
         );
       }
 
@@ -366,7 +363,7 @@ serve(async (req) => {
 
       if (!pagesResp.ok || pagesResult.error) {
         throw new Error(
-          `Kunne ikke hente sider (kode ${pagesResult.error?.code}): ${pagesResult.error?.message || 'Provider returned an invalid response'}`
+          providerFailure('Facebook', pagesResp.status)
         );
       }
       
@@ -425,8 +422,8 @@ serve(async (req) => {
     }
 
     throw new Error(`Ukjent action: ${action}`);
-  } catch (error) {
-    const msg = redact(error instanceof Error ? error.message : "Ukjent feil");
+  } catch {
+    const msg = 'Facebook-kontrollen kunne ikke fullføres. Kontroller tilkoblingen før du prøver igjen.';
     console.error("[facebook-token-health] Error:", msg);
     return new Response(
       JSON.stringify({ success: false, error: msg }),

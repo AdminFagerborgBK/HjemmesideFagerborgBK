@@ -1,6 +1,6 @@
 import Header from '@/components/Header';
 import Seo from '@/components/Seo';
-import HeroCarousel from '@/components/HeroCarousel';
+import { lazy, Suspense } from 'react';
 import MatchCenter from '@/components/MatchCenter';
 import LeagueTable from '@/components/LeagueTable';
 import LatestVideos from '@/components/LatestVideos';
@@ -10,6 +10,8 @@ import { HOMEPAGE_VIDEO_LIMIT } from '@/lib/homepageMedia';
 import SponsorCarousel from '@/components/SponsorCarousel';
 import Footer from '@/components/Footer';
 import { FeatureGate } from '@/components/FeatureGate';
+
+const HeroCarousel = lazy(() => import('@/components/HeroCarousel'));
 
 const Index = () => {
   return (
@@ -24,7 +26,9 @@ const Index = () => {
       <main>
         <h1 className="sr-only">Fagerborg BK – fotball i Oslo siden 1914</h1>
         {/* Hero Section with News Carousel */}
-        <HeroCarousel />
+        <Suspense fallback={<section className="relative h-[70vh] md:h-[85vh] bg-fagerborg-navy" aria-busy="true" aria-label="Laster klubbnyheter" />}>
+          <HeroCarousel />
+        </Suspense>
         
         {/* Match Center - A-laget & B-laget */}
         <MatchCenter />

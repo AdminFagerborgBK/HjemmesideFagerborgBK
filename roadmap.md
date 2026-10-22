@@ -1,9 +1,11 @@
 # Roadmap
-- [ ] Sluttkontroll 22.10: nyhetsbrevlenker/mottakerlogging og fakturakrav er testet; siste deploys, GitHub-oppfølging og fresh checkout må bekreftes.
-- [ ] Full overlevering: DST-korrekt lagring og dynamisk sesongkonfigurasjon for backend, frontend og change-gating.
-- [ ] Full overlevering: sesongbundet Målklubb og hash-only invitasjoner med sikre eksisterende lenker/resend.
+- [x] Sluttkontroll 22.10 første runde: 103 tester, 458 GitHub-blobs, fresh checkout/build og grønne Sports 39808649096 / Matches 39808709394 / Grasrot 39808773326 på 7f2e758 verifisert.
+- [ ] Ny overleveringsrunde: nyhetsbrevvalg/provider-feil rettet og fire funksjoner deployet; lokal HTTP-nyhetsbrevtest og live admin/lesekontroller bestod. Ny GitHub-kopi/fresh checkout/workflows gjenstår.
+- [x] Full overlevering: DST-korrekt lagring og dynamisk sesongkonfigurasjon for backend, frontend og change-gating; ny kontroll og DST/2027-tester bestod.
+- [x] Full overlevering: sesongbundet Målklubb og hash-only invitasjoner med sikre eksisterende lenker/resend; DB viser null råtoken, sesongtests bestod.
 - [ ] Full overlevering: lazy loading, SEO, mobil/tilgjengelighet, nyhetsbrev, sosiale medier og spillerportal-kontroller.
 - [ ] Full overlevering: full GitHub-main-kopi og ren installasjon/build, live RLS/grants/cron, deploys og faktiske safe workflow-kjøringer.
+- [ ] Automatisk artikkelsitemap: statisk sitemap dekker offentlige ruter, men ikke nye publiserte artikkelslugs; krever hendelsesdrevet generering uten ny polling.
 - [ ] Separat spillerportal: innlogging finnes og bekreftet e-post kontrolleres; automatisk oppslag mangler i portalens my-agreement. Krever endring og innlogget kontroll i spillerprosjektet c03d7dcc-2465-440d-9038-10741bcf8fac; ikke flytt domenet.
 - [x] Avtalen sendes før betaling er gjennomført: ingen sperre på ubetalt status; testmail sendt med ubetalt status, gjentatt sending sendte ikke en ny mail.
 - [x] Separat spillersøknad, adminbehandling/invitasjon og sikker personlig side med private PDF-er, eksplisitt avtale-/planbekreftelse, egenbekreftet vs manuelt verifisert status og historikk. Desktop/mobil, riktig RSPTA-lenke, private PDF-er, avvist ugyldig invitasjon og admin-tilgang verifisert.

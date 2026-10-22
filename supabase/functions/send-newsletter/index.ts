@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
 import { deliveryOutcome, assertTestRecipient } from './policy.ts';
 import { issueNewsletterToken } from '../_shared/newsletterToken.mjs';
 import { deliverRecorded } from './delivery.mjs';
+import { providerFailure } from '../_shared/providerFailure.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -93,7 +94,7 @@ serve(async (req) => {
     recoverDelivery = async () => {
       if (!claimedNewsletter) return;
       const {error} = await serviceClient.from('newsletters').update({delivery_state:'partial'}).eq('id',claimedNewsletter).eq('delivery_state','sending');
-      if (error) console.error('Newsletter delivery recovery failed:',error.message);
+      if (error) console.error('Newsletter delivery recovery failed; manual reconciliation required');
     };
 
     if (!isCron) {
@@ -126,8 +127,8 @@ serve(async (req) => {
     if (test_send) {
       if (!user?.email) throw new Error("Test-sending krever innlogget admin");
       const testHtml = withFooter(newsletter.body_html)
-        .replace(/\{\{UNSUBSCRIBE_URL\}\}/g, `${SITE_URL}/nyhetsbrev`)
-        .replace(/\{\{PREFERENCES_URL\}\}/g, `${SITE_URL}/nyhetsbrev`);
+        .replace(/<a\b[^>]*href=["']\{\{(?:UNSUBSCRIBE_URL|PREFERENCES_URL)\}\}["'][^>]*>([\s\S]*?)<\/a>/gi, '<span>$1 (deaktivert i test)</span>')
+        .replace(/\{\{(?:UNSUBSCRIBE_URL|PREFERENCES_URL)\}\}/g, 'deaktivert i test');
 
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -144,8 +145,7 @@ serve(async (req) => {
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Kunne ikke sende test-e-post: ${errText}`);
+        throw new Error(providerFailure('Resend', res.status));
       }
 
       return new Response(JSON.stringify({ success: true, test: true, sent_to: user.email }), {
@@ -207,15 +207,14 @@ serve(async (req) => {
           });
 
           if (!res.ok) {
-            const errText = await res.text();
-            return {ok:false,id:null as string|null,error:errText.slice(0,500)};
+            return {ok:false,id:null as string|null,error:providerFailure('Resend', res.status)};
           }
           const provider=await res.json();
           return {ok:true,id:typeof provider.id==='string'?provider.id:null,error:null as string|null};
             },
             recordOutcome: async(delivery: {id:string},result: {ok:boolean;id:string|null;error:string|null})=>{
               const {error:persistError}=await serviceClient.from('newsletter_recipients').update({status:result.ok?'sent':'failed',error:result.ok?(result.id?`provider_id:${result.id}`:null):result.error}).eq('id',delivery.id);
-              if(persistError) throw new Error(`Delivery ${result.id??'unknown'} needs reconciliation for recipient ${delivery.id}`);
+              if(persistError) throw new Error('Delivery outcome needs manual reconciliation');
               if(!result.ok) throw new Error(`Email provider rejected delivery: ${result.error}`);
             },
           });
@@ -225,7 +224,7 @@ serve(async (req) => {
 
       for (const r of results) {
         if (r.status === "fulfilled") sentCount++;
-        else errors.push(r.reason?.message || "Unknown error");
+        else errors.push('Delivery failed or uncertain; manual reconciliation required');
       }
 
       if (i + 10 < members.length) {
@@ -244,16 +243,16 @@ serve(async (req) => {
       type: "newsletter_sent",
       payload: { newsletter_id, subject: newsletter.subject, sent_count: sentCount, errors: errors.length },
     });
-    if(activityError) throw activityError;
+    if(activityError) console.error('Newsletter completion audit could not be recorded');
 
     return new Response(JSON.stringify({ ...outcome, errors }), {
       status: outcome.success ? 200 : 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e: any) {
+  } catch {
     if (recoverDelivery) await recoverDelivery();
-    console.error("send-newsletter error:", e);
-    return new Response(JSON.stringify({ error: e.message }), {
+    console.error('Newsletter request failed; check persisted delivery state before retrying');
+    return new Response(JSON.stringify({ error: 'Utsendingen kunne ikke fullføres. Kontroller leveringsstatus før du prøver igjen.' }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

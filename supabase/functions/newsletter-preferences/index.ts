@@ -1,13 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4';
 import { verifyNewsletterToken } from '../_shared/newsletterToken.mjs';
+import { PreferenceUpdate } from './policy.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-const ALLOWED_INTERESTS = ["kamper", "ungdom", "dugnad", "arrangementer", "sponsor"];
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -27,10 +26,9 @@ serve(async (req) => {
     const memberId = await verifyNewsletterToken(body?.token, signingKey);
     if (!memberId) return json({ error: "Lenken er ugyldig eller utløpt. Bruk lenken fra et nyere nyhetsbrev." }, 403);
 
-    const serviceClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      signingKey,
-    );
+    const serviceUrl = Deno.env.get('SUPABASE_URL');
+    if (!serviceUrl) throw new Error('Tjenesten er ikke konfigurert');
+    const serviceClient = createClient(serviceUrl, signingKey);
 
     const { data: member, error: readError } = await serviceClient
       .from("memberships")
@@ -57,10 +55,10 @@ serve(async (req) => {
     }
 
     if (action === "update") {
-      const optOut = body?.newsletter_opt_out === true;
-      const interests: string[] = Array.isArray(body?.interests)
-        ? body.interests.filter((i: unknown) => typeof i === "string" && ALLOWED_INTERESTS.includes(i))
-        : (member.interests ?? []);
+      const input = PreferenceUpdate.safeParse(body);
+      if (!input.success) return json({error:'Abonnementsvalget må være ja eller nei, og interessene må være gyldige.'},400);
+      const optOut = input.data.newsletter_opt_out;
+      const interests = input.data.interests ?? (member.interests ?? []);
 
       const { error } = await serviceClient
         .from("memberships")
@@ -72,14 +70,14 @@ serve(async (req) => {
         type: optOut ? "newsletter_unsubscribe" : "newsletter_preferences_updated",
         payload: { member_id: memberId, opt_out: optOut, interests },
       });
-      if (logError) throw logError;
+      if (logError) console.error('Newsletter preference audit could not be recorded');
 
       return json({ success: true, newsletter_opt_out: optOut, interests });
     }
 
     return json({ error: "Ukjent handling" }, 400);
-  } catch (e: any) {
-    console.error("newsletter-preferences error:", e);
-    return json({ error: e.message ?? "Ukjent feil" }, 500);
+  } catch {
+    console.error('Newsletter preference operation failed');
+    return json({ error: 'Innstillingene kunne ikke hentes eller lagres. Prøv igjen senere.' }, 500);
   }
 });
