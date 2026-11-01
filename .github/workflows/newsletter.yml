@@ -5,7 +5,9 @@ name: Monthly Newsletter
 
 on:
   schedule:
-    - cron: '0 7 1 * *'
+    # 10:00 Oslo time on the 1st: 09:00 UTC in winter (CET), 08:00 UTC in summer (CEST)
+    - cron: '0 9 1 11,12,1-3 *'
+    - cron: '0 8 1 4-10 *'
   workflow_dispatch:
 
 jobs:
