@@ -142,6 +142,7 @@ Skriv på norsk. Hold det kort og engasjerende. Inkluder en header med klubblogo
 Bruk {{UNSUBSCRIBE_URL}} som plassholder for avmeldingslenken.
 Bruk https://www.fagerborgbk.no som base-URL for lenker.
 VIKTIG: Bruk NØYAKTIG denne bilde-URL-en for klubblogoen i headeren, ingen andre: https://fagerborgbk.no/images/fagerborg-logo-email.png
+VIKTIG: Nederst i nyhetsbrevet, rett over avmeldingslenken, skal det ALLTID være en seksjon "Følg oss" med lenker til klubbens sosiale medier: Facebook (https://www.facebook.com/profile.php?id=61587527156113), Instagram (https://www.instagram.com/fagerborg_bk/), TikTok (https://www.tiktok.com/@fagerborgbk) og YouTube (https://www.youtube.com/@FagerborgBK).
 
 Siste nyheter:
 ${news.map(n => `- "${n.title}" (${n.published_at?.slice(0,10)}): ${n.excerpt || ""} [/nyheter/${n.slug}]`).join("\n")}
@@ -158,7 +159,7 @@ ${fbStandings.length > 0 ? fbStandings.map((s: any) => `- ${s.team_name} i ${s.l
 Siste videoer:
 ${videos.map(v => `- "${v.title}": ${v.description || ""} [${v.video_url}]`).join("\n")}
 
-${news.length === 0 && matches.length === 0 && prevMatches.length === 0 && videos.length === 0 ? "Det har vært en rolig måned. Lag et kort nyhetsbrev som ser fremover." : ""}
+${news.length === 0 && matches.length === 0 && prevMatches.length === 0 && videos.length === 0 ? (currentMonth === 11 ? "Det har vært en rolig måned. Lag et kort nyhetsbrev som ønsker leserne en fin adventstid og en god jul, og ser frem mot neste sesong." : currentMonth === 0 ? "Det har vært en rolig måned. Lag et kort nyhetsbrev som ønsker leserne et godt nytt år og ser frem mot neste sesong." : "Det har vært en rolig måned. Lag et kort nyhetsbrev som ser fremover.") : ""}
 
 Vis kampene i kronologisk rekkefølge (tidligst dato først). Skill mellom spilte kamper (vis resultat) og kommende kamper.
 Inkluder en seksjon med forrige måneds resultater og en seksjon med tabellplassering med kort kommentar.
@@ -234,18 +235,14 @@ Returner KUN HTML-koden, ingen markdown-formatering rundt.`;
       }
     }
 
-    // Send admin notification email
+    // Send admin notification email. Wait briefly so the provider rate limit
+    // (10 req/s) has recovered after the member batch, retry once on 429, and
+    // never fail the run because of this optional notice.
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (RESEND_API_KEY) {
       try {
         const sentOk = sendResult?.success === true;
-        const notification = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        const payload = JSON.stringify({
             from: "Fagerborg BK <noreply@support.fagerborgbk.no>",
             to: ["post@fagerborgbk.no"],
             subject: autoSend
@@ -259,11 +256,26 @@ Returner KUN HTML-koden, ingen markdown-formatering rundt.`;
 <p>Utkastet ligger klart i <a href="https://fagerborgbk.lovable.app/admin/newsletters">admin-panelet</a> for manuell sending.</p>`)
               : `<p>Et nytt nyhetsbrev-utkast er generert og venter på godkjenning.</p>
 <p>Gå til <a href="https://fagerborgbk.lovable.app/admin/newsletters">admin-panelet</a> for å se og sende det.</p>`,
-          }),
-        });
-        if (!notification.ok) throw new Error(`Adminvarsel feilet [${notification.status}]: ${await notification.text()}`);
-      } catch (e) {
-        throw e;
+          });
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        if (autoSend) await wait(1500);
+        let notification: Response | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          notification = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+              "Idempotency-Key": `newsletter-admin-${newsletter.id}`,
+            },
+            body: payload,
+          });
+          if (notification.status !== 429) break;
+          await wait(2000 * (attempt + 1));
+        }
+        if (!notification?.ok) console.error(`Adminvarsel feilet [${notification?.status}]`);
+      } catch {
+        console.error("Adminvarsel kunne ikke sendes");
       }
     }
 
